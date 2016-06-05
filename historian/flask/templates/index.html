@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Chrome Historian</title>
+        <style>
+            table {
+                border: 1px solid gray;
+                border-collapse: collapse;
+            }
+
+            table td , table th {
+                border: 1px solid gray;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Chrome Historian</h1>
+
+        <h2>Urls</h2>
+        <table>
+            <tr>
+                <th>Url</th>
+                <th>Title</th>
+                <th>Last Visit</th>
+            </tr>
+            {% for url in hist.urls %}
+                <tr>
+                <td>{{ url.url }}</td>
+                <td>{{ url.title }}</td>
+                <td>{{ url.last_visit_time }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                <td colspan="3">No Urls in History</td>
+                </tr>
+            {% endfor %}
+        </table>
+    </body>
+</html>

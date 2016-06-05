@@ -1,14 +1,38 @@
+import os
 from argparse import ArgumentParser
 
-from historian import app
+from historian.flask import app
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--server', action='store_true', 
-            help='Run a web interface')
+    subparsers = parser.add_subparsers()
+
+    webapp = subparsers.add_parser('server', help='Run local web version of '
+                                                  'historian')
+    webapp.set_defaults(func=run_webapp)
+    webapp.add_argument('-d', '--histories', help='The location of the chrome '
+                                                  'history files. Defaults to '
+                                                  '"histories" in the current '
+                                                  'directory')
+    webapp.add_argument('-l', '--host', default='127.0.0.1')
+    webapp.add_argument('-p', '--port', default=5000)
+    webapp.add_argument('--debug', action='store_true', default=False)
 
     args = parser.parse_args()
 
-    if args.server:
-        app.app.run()
+    if 'func' in args:
+        args.func(args)
+    else:
+        parser.print_usage()
+
+
+def run_webapp(args):
+    if args.histories:
+        histories = args.histories
+    else:
+        histories = os.getcwd()
+
+    print("[Historian] Using histories from {}".format(histories))
+    app.config['HISTORIES'] = args.histories
+    app.run(host=args.host, port=args.port, debug=args.debug)

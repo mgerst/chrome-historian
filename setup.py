@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='chrome-historian',
-    version='1.0',
+    version='0.1',
     long_description=__doc__,
     packages=find_packages(),
     include_Package_data=True,
@@ -13,4 +13,10 @@ setup(
     entry_points={
         'console_scripts': ['chrome-historian=historian.historian:main'],
     },
+    classifiers=[
+        'Development Status :: 2 - Pre-Alpha',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Topic :: Utilities',
+    ],
 )
