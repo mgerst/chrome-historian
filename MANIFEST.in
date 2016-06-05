@@ -1,0 +1,2 @@
+recursive-include historian/templates *
+recursive-include historian/static *
