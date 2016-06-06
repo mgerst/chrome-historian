@@ -1,39 +1,47 @@
-<!doctype html>
-<html>
-    <head>
-        <title>Chrome Historian</title>
-        <style>
-            table {
-                border: 1px solid gray;
-                border-collapse: collapse;
-            }
+{% extends "base.html" %}
 
-            table td , table th {
-                border: 1px solid gray;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Chrome Historian</h1>
-
-        <h2>Urls</h2>
-        <table>
-            <tr>
-                <th>Url</th>
-                <th>Title</th>
-                <th>Last Visit</th>
-            </tr>
-            {% for url in hist.urls %}
+{% block content %}
+    <div class="row">
+        <div class="col-md-12">
+            <h2>Urls</h2>
+            <form class="form-inline">
+                <div class="form-group">
+                    <label for="title">Title:</label>
+                    <input type="text" class="form-control" name="title_match" id="title" placeholder="{{ title_match }}">
+                </div>
+                <div class="form-group">
+                    <label for="url">Url:</label>
+                    <input type="text" class="form-control" name="url_match" id="url" placeholder="{{ url_match }}">
+                </div>
+                <button type="submit" class="btn btn-primary">Search</button>
+                <a href="{{ url_for('index') }}" class="btn btn-default">Clear</a>
+            </form>
+            <table class="table table-bordered">
+                <thead>
                 <tr>
-                <td>{{ url.url }}</td>
-                <td>{{ url.title }}</td>
-                <td>{{ url.last_visit_time }}</td>
+                    <th>Url</th>
+                    <th>Title</th>
+                    <th>Last Visit</th>
+                    <th>Actions</th>
                 </tr>
-            {% else %}
-                <tr>
-                <td colspan="3">No Urls in History</td>
-                </tr>
-            {% endfor %}
-        </table>
-    </body>
-</html>
+                </thead>
+                <tbody>
+                {% for url in hist.urls %}
+                    <tr>
+                        <td>{{ url.url|truncate(50) }}</td>
+                        <td>{{ url.title|truncate(50) }}</td>
+                        <td>{{ url.last_visit_time }}</td>
+                        <td>
+                            <a href="{{ url_for('graph', id=url.id) }}">View Graph</a>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="4">No Urls in History</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}
