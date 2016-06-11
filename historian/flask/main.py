@@ -46,13 +46,19 @@ def graph_ajax(id):
             "url_id": visit.url_id,
             "url": visit.url.url,
             "url_title": visit.url.title,
-            "from": visit.from_visit,
+            "from": visit.from_visit_raw,
         })
 
-        if visit.from_visit:
-            from_visit = hist.get_visit_by_id(visit.from_visit)
+        if visit.from_visit_raw:
+            from_visit = visit.from_visit
             if from_visit not in visited:
                 visits.add(from_visit)
+
+        to = visit.to_visit
+        if len(to) > 0 and len(visits) < 50 and len(visited) < 50:
+            for to_visit in to:
+                if to_visit not in visited:
+                    visits.add(to_visit)
 
         if len(visits) == 0:
             left = False

@@ -119,7 +119,7 @@ class Url(object):
 
     @property
     def last_visit_time(self):
-        return to_datetime(self._last_visit_time_raw)
+        return to_datetime(self.last_visit_time_raw)
 
     def visit_at(self, time):
         c = self._db.cursor()
@@ -135,12 +135,47 @@ class Visit(object):
         self.id = row[0]
         self.url_id = row[1]
         self.visit_time = row[2]
-        self.from_visit = row[3]
+        self.from_visit_raw = row[3]
         self.transition = row[4]
         self.segment_id = row[5]
         self.visit_duration = row[6]
 
-        self.url = url
+        if isinstance(url, Url):
+            self.url = url
+        elif not url:
+            c = self._db.cursor()
+            row = c.execute("SELECT * FROM urls WHERE id = ?", (self.url_id,)).fetchone()
+            self.url = Url(row, self._db)
+        else:
+            raise TypeError("The url parameter to Visit must be a Url or None")
+
+    @property
+    def from_visit(self):
+        if self.from_visit_raw == 0:
+            return None
+
+        c = self._db.cursor()
+        c.execute("SELECT * FROM visits WHERE id = ?", (self.from_visit_raw,))
+        row = c.fetchone()
+        return Visit(row, None, self._db)
+
+    @property
+    def to_visit(self):
+        visits = []
+
+        c = self._db.cursor()
+        c.execute("SELECT * FROM visits WHERE from_visit = ?", (self.id,))
+
+        for visit in c.fetchall():
+            visits.append(Visit(visit, None, self._db))
+
+        return visits
+
+    def __repr__(self):
+        if self.from_visit_raw:
+            return "<Visit: {}->{} url({})>".format(self.from_visit_raw, self.id, self.url_id)
+
+        return "<Visit: {} url({})>".format(self.id, self.url_id)
 
 
 def to_datetime(itime):

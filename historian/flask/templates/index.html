@@ -30,7 +30,7 @@
                     <tr>
                         <td>{{ url.url|truncate(50) }}</td>
                         <td>{{ url.title|truncate(50) }}</td>
-                        <td>{{ url.last_visit_time }}</td>
+                        <td title="{{ url.last_visit_time_raw }}">{{ url.last_visit_time }}</td>
                         <td>
                             <a href="{{ url_for('graph', id=url.id) }}">View Graph</a>
                         </td>

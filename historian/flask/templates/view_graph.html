@@ -75,6 +75,9 @@ View Graph | Chrome Historian
                     }
 
                     cy.layout({ name: 'breadthfirst' });
+                },
+                error: function() {
+                    alert("There was an error loading the view graph!");
                 }
             });
         })
@@ -85,7 +88,7 @@ View Graph | Chrome Historian
     <style>
         #cy {
             width: 100%;
-            height: 500px;
+            height: 600px;
             display: block;
         }
     </style>
