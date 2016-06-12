@@ -12,13 +12,28 @@ View Graph | Chrome Historian
             </div>
 
             <div id="cy" style="background-color: gray"></div>
+
+            <div class="alert alert-block alert-info hide" id="info">
+                <strong>Info</strong>
+                <dl>
+                    <dt>Url</dt>
+                    <dd><span class="selected-url"></span></dd>
+                    <dt>Title</dt>
+                    <dd><span class="selected-title"></span></dd>
+                </dl>
+            </div>
         </div>
     </div>
 {% endblock %}
 
 {% block extrajs %}
     <script src="/static/js/cytoscape.min.js"></script>
+    <script src="https://cdn.rawgit.com/cpettitt/dagre/v0.7.4/dist/dagre.min.js"></script>
+    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.1.2/cytoscape-dagre.js"></script>
     <script>
+        "use strict";
+        var urlID = {{ url.id }}
+
         $(document).ready(function() {
             var cy = cytoscape({
                 container: $("#cy"),
@@ -32,15 +47,72 @@ View Graph | Chrome Historian
                             'background-color': '#999',
                             'text-outline-color': '#999'
                         })
+                    .selector('node.highlighted')
+                        .css({
+                            'min-zoomed-font-size': 0,
+                            'font-size': 10,
+                            'text-outline-width': 2,
+                            'text-outline-opacity': 1,
+                            'z-index': 9999,
+                            'background-color': 'blue',
+                            'border-width': 2,
+                            'border-color': '#222'
+                        })
+                    .selector('node.rootNode')
+                        .css({
+                            'background-color': 'green'
+                        })
                     .selector('edge')
                         .css({
                             'curve-style': 'bezier',
                             'target-arrow-shape': 'triangle',
-                            'target-arrow-color': '#ccc',
-                            'line-cllor': '#ccc',
+                            'target-arrow-color': 'orange',
+                            'line-color': '#ccc',
                             'width': 1
                         })
+                    .selector('edge.highlighted')
+                        .css({
+                            'opacity': 0.8,
+                            'width': 4,
+                            'z-index': 9999,
+                        })
+                    .selector(':selected')
+                        .css({
+                            'border-width': 3,
+                            'border-color': '#333'
+                        })
+                    .selector('.faded')
+                        .css({
+                            'opacity': 0.5,
+                            'text-opacity': 0
+                        })
             });
+
+            cy.on('select', 'node', function(e){
+                var node = this;
+
+                nodeSelected(node);
+                showNodeInfo(node);
+            });
+
+            cy.on('unselect', 'node', function(e){
+                var node = this;
+
+                clear();
+                hideNodeInfo();
+            });
+
+            /*
+            cy.on('free', 'node', function ( e ) {
+                var n = e.cyTarget;
+                var p = n.position();
+
+                n.data('orgPos', {
+                    x: p.x,
+                    y: p.y
+                });
+            });
+            */
 
             $.ajax({
                 method: "GET",
@@ -50,37 +122,137 @@ View Graph | Chrome Historian
                     for (var i = 0; i < data.length; i++) {
                         var visit = data[i];
 
-                        cy.add({
+                        let node = {
                             data: {
                                 id: visit.id,
                                 url: visit.url,
                                 uri_id: visit.url_id,
                                 title: visit.title
                             }
-                        });
+                        };
+
+                        if (visit.url_id === urlID) {
+                            node.classes = "rootNode";
+                        }
+
+                        cy.add(node);
                     }
 
                     // Make edges
                     for (i = 0; i < data.length; i++) {
                         visit = data[i];
                         if (visit.from != 0) {
-                            cy.add({
-                                data: {
-                                    id: "edge" + visit.id + "-" + visit.from,
-                                    source: visit.from,
-                                    target: visit.id
-                                }
-                            });
+                            let id = `edge${visit.id}-${visit.from}`;
+
+                            if (cy.getElementById(id).length == 0) {
+                                cy.add({
+                                    data: {
+                                        id: id,
+                                        source: visit.from,
+                                        target: visit.id
+                                    }
+                                });
+                            }
                         }
                     }
 
-                    cy.layout({ name: 'breadthfirst' });
+                    cy.layout({ name: 'dagre' });
                 },
                 error: function() {
                     alert("There was an error loading the view graph!");
                 }
             });
-        })
+
+            var layoutPadding = 50;
+            var layoutDuration = 500;
+
+            function nodeSelected( node ) {
+                var nhood = node.closedNeighborhood();
+
+                cy.batch(function() {
+                    cy.elements().not(nhood).removeClass('highlighted').addClass('faded');
+                    nhood.removeClass('faded').addClass('highlighted');
+
+                    nhood.forEach(function(n) {
+                        let p = n.position();
+
+                        n.data('orgPos', {
+                            x: p.x,
+                            y: p.y
+                        })
+                    });
+
+                    var npos = node.position();
+                    var w = window.innerWidth;
+                    var h = window.innerHeight;
+
+                    cy.stop().animate({
+                        fit: {
+                            eles: cy.elements(),
+                            padding: layoutPadding
+                        }
+                    }, {
+                        duration: layoutDuration
+                    }).delay( layoutDuration, function(){
+                        nhood.layout({
+                            name: 'concentric',
+                            padding: layoutPadding,
+                            animate: true,
+                            animationDuration: layoutDuration,
+                            boundingBox: {
+                                x1: npos.x - w/2,
+                                x2: npos.x + w/2,
+                                y1: npos.y - w/2,
+                                y2: npos.y + w/2
+                            },
+                            fit: true,
+                            concentric: function( n ){
+                                if (node.id() === n.id() ) {
+                                    return 2;
+                                } else {
+                                    return 1;
+                                }
+                            },
+                            levelWidth: function() {
+                                return 1;
+                            }
+                        });
+                    });
+                });
+            }
+
+            function clear(){
+                cy.batch(function(){
+                    cy.$('.highlighted').forEach(function(n){
+                        n.animate({
+                            position: n.data('orgPos')
+                        });
+                    });
+                });
+
+                cy.elements().removeClass("highlighted").removeClass("faded");
+            }
+
+            function showNodeInfo(node) {
+                let info = $("#info");
+
+                info.find("span.selected-url").text(node.data("url"));
+                info.find("span.selected-title").text(node.data("title"));
+
+                info.removeClass("hide");
+                info.show();
+            }
+
+            function hideNodeInfo(){
+                let info = $("#info");
+
+                info.find("span.selected-url").text("");
+                info.find("span.selected-title").text("");
+
+                info.hide();
+            }
+        });
+
     </script>
 {% endblock %}
 

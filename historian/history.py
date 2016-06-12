@@ -142,6 +142,10 @@ class Url(object):
         row = c.fetchone()
         return Visit(row, self, self._db)
 
+    @property
+    def latest_visit(self):
+        return self.visit_at(self.last_visit_time_raw)
+
 
 class Visit(object):
     def __init__(self, row, url, db):

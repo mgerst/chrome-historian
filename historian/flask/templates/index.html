@@ -41,6 +41,7 @@
                     <th>Url</th>
                     <th>Title</th>
                     <th>Last Visit</th>
+                    <th>Visit Count</th>
                     <th>Actions</th>
                 </tr>
                 </thead>
@@ -50,13 +51,14 @@
                         <td>{{ url.url|truncate(50) }}</td>
                         <td>{{ url.title|truncate(50) }}</td>
                         <td title="{{ url.last_visit_time_raw }}">{{ url.last_visit_time }}</td>
+                        <td>{{ url.visit_count }}</td>
                         <td>
                             <a href="{{ url_for('graph', id=url.id) }}">View Graph</a>
                         </td>
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="4">No Urls in History</td>
+                        <td colspan="5">No Urls in History</td>
                     </tr>
                 {% endfor %}
                 </tbody>
