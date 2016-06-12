@@ -1,6 +1,8 @@
 import sqlite3
 import datetime
 
+from historian.exceptions import DoesNotExist
+
 
 class History(object):
     """
@@ -80,6 +82,8 @@ class History(object):
         for url in c.fetchall():
             self.urls.append(Url(url, self.db))
 
+        return self.urls
+
     def get_url_by_id(self, url_id):
         """
         Retrieve an individual url by its ID
@@ -91,6 +95,8 @@ class History(object):
         c = self.db.cursor()
         c.execute(sql, (url_id,))
         row = c.fetchone()
+        if not row:
+            raise DoesNotExist(Url, url_id)
 
         return Url(row, self.db)
 
@@ -103,6 +109,9 @@ class History(object):
         url = self.get_url_by_id(row[1])
 
         return Visit(row, url, self.db)
+
+    def close(self):
+        self.db.close()
 
 
 class Url(object):

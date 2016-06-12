@@ -2,22 +2,23 @@ import os
 from argparse import ArgumentParser
 
 from historian.flask import app
+from historian.inspector import InspectorShell
 
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument('-d', '--histories', help='The location of the chrome history files. Defaults to "histories" in'
+                        ' the current directory')
     subparsers = parser.add_subparsers()
 
-    webapp = subparsers.add_parser('server', help='Run local web version of '
-                                                  'historian')
+    webapp = subparsers.add_parser('server', help='Run local web version of historian')
     webapp.set_defaults(func=run_webapp)
-    webapp.add_argument('-d', '--histories', help='The location of the chrome '
-                                                  'history files. Defaults to '
-                                                  '"histories" in the current '
-                                                  'directory')
     webapp.add_argument('-l', '--host', default='127.0.0.1')
     webapp.add_argument('-p', '--port', default=5000)
     webapp.add_argument('--debug', action='store_true', default=False)
+
+    inspector = subparsers.add_parser('inspect', help='Inspect a chrome history from the command line')
+    inspector.set_defaults(func=run_inspector)
 
     args = parser.parse_args()
 
@@ -36,3 +37,7 @@ def run_webapp(args):
     print("[Historian] Using histories from {}".format(histories))
     app.config['HISTORIES'] = args.histories
     app.run(host=args.host, port=args.port, debug=args.debug)
+
+
+def run_inspector(args):
+    InspectorShell(args).cmdloop()
