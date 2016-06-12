@@ -13,12 +13,28 @@ def index():
     date_gt = request.args.get('date_gt', None)
     url_match = request.args.get('url_match', None)
     title_match = request.args.get('title_match', None)
+    limit = request.args.get('limit', 25)
+    start = request.args.get('start', 0)
+
+    if limit:
+        limit = int(limit)
+    if start:
+        start = int(start)
 
     hist = History(app.config['HISTORIES'])
-    hist.get_urls(date_lt=date_lt, date_gt=date_gt, url_match=url_match, title_match=title_match)
+
+    will_paginate = False
+    url_count = hist.get_url_count()
+    if limit:
+        if url_count > limit:
+            will_paginate = True
+
+    hist.get_urls(date_lt=date_lt, date_gt=date_gt, url_match=url_match, title_match=title_match, limit=limit,
+                  start=start)
 
     return render_template('index.html', hist=hist, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
-                           title_match=title_match)
+                           title_match=title_match, will_paginate=will_paginate, limit=limit, start=start,
+                           url_count=url_count)
 
 
 @app.route('/graph/<id>')

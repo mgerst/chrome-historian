@@ -3,7 +3,7 @@
 {% block content %}
     <div class="row">
         <div class="col-md-12">
-            <h2>Urls</h2>
+            <h2>Urls ({{ hist.urls|length }})</h2>
             <form class="form-inline">
                 <div class="form-group">
                     <label for="title">Title:</label>
@@ -15,7 +15,26 @@
                 </div>
                 <button type="submit" class="btn btn-primary">Search</button>
                 <a href="{{ url_for('index') }}" class="btn btn-default">Clear</a>
+                {% if limit %}
+                <input type="hidden" name="limit" value="{{ limit }}" />
+                {% endif %}
             </form>
+
+            <nav>
+                <ul class="pager">
+                    {% if start >= limit %}
+                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">&larr; Previous</a></li>
+                    {% else %}
+                        <li class="previous disabled"><a href="#">&larr; Previous</a></li>
+                    {% endif %}
+                    {% if start + limit < hist.urls|length %}
+                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">Next &rarr;</a></li>
+                    {% else %}
+                        <li class="next disabled"><a href="#">Next &rarr;</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+
             <table class="table table-bordered">
                 <thead>
                 <tr>
@@ -42,6 +61,21 @@
                 {% endfor %}
                 </tbody>
             </table>
+
+            <nav>
+                <ul class="pager">
+                    {% if start >= limit %}
+                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">&larr; Previous</a></li>
+                    {% else %}
+                        <li class="previous disabled"><a href="#">&larr; Previous</a></li>
+                    {% endif %}
+                    {% if start + limit < hist.urls|length %}
+                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">Next &rarr;</a></li>
+                    {% else %}
+                        <li class="next disabled"><a href="#">Next &rarr;</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
         </div>
     </div>
 {% endblock %}

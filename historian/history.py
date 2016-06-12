@@ -20,7 +20,12 @@ class History(object):
         self.db = sqlite3.connect(db_path)
         self.urls = []
 
-    def get_urls(self, date_lt=None, date_gt=None, url_match=None, title_match=None):
+    def get_url_count(self):
+        c = self.db.cursor()
+
+        return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
+
+    def get_urls(self, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None, start=None):
         """
         Retrieve all urls in the history database.
 
@@ -28,6 +33,8 @@ class History(object):
         :param int date_gt: Search for all urls last visited after this date
         :param str url_match: Search for urls matching this pattern
         :param title_match: Search for urls with titles matching this pattern
+        :param int limit: Restrict search to this many urls
+        :param int start: Start the search with this offset, can only be used with `limit`
         """
         c = self.db.cursor()
 
@@ -60,6 +67,14 @@ class History(object):
             sql += clause
 
         sql += " ORDER BY last_visit_time DESC"
+
+        if limit:
+            sql += " LIMIT :limit"
+            sub['limit'] = int(limit)
+
+            if start:
+                sql += ", :offset"
+                sub['offset'] = int(start)
 
         c.execute(sql, sub)
         for url in c.fetchall():
