@@ -106,7 +106,7 @@ class InspectorShell(BaseShell):
             print("[!!] No Loaded DB")
 
     def do_enter(self, arg):
-        self.spawn_subshell(DBShell)
+        self.spawn_subshell(DBShell, hist=self.hist)
 
     def postloop(self):
         if self.hist:
