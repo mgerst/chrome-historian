@@ -1,7 +1,75 @@
 import sqlite3
 import datetime
+import os
+import tempfile
 
 from historian.exceptions import DoesNotExist
+
+
+class MultiUserHistory(object):
+    def __init__(self, db_paths):
+        self.db_paths = db_paths
+        self.dbs = {}
+        for db in db_paths:
+            name = os.path.basename(os.path.normpath(db))
+            self.dbs[name] = History(db)
+
+        self.merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
+        self.merge_history()
+
+    def merge_history(self):
+        db = sqlite3.connect(self.merged_path)
+
+        # Create combined tables
+        db.execute(
+            'CREATE TABLE urls(id INTEGER PRIMARY KEY,name LONGVARCHAR,user_id INTEGER,'
+            'url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,'
+            'typed_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL,hidden INTEGER DEFAULT 0 NOT NULL,'
+            'favicon_id INTEGER DEFAULT 0 NOT NULL)')
+        db.execute(
+            'CREATE TABLE visits(id INTEGER PRIMARY KEY,name LONGVAR,user_id INTEGER,url INTEGER NOT NULL,'
+            'visit_time INTEGER NOT NULL,from_visit INTEGER,transition INTEGER DEFAULT 0 NOT NULL,segment_id INTEGER,'
+            'visit_duration INTEGER DEFAULT 0 NOT NULL)'
+        )
+
+        for username, db in self.dbs.items():
+            c = db.db.cursor()
+            urls = c.execute("SELECT * FROM urls").fetchall()
+
+            for url in urls:
+                url = {
+                    'username': username,
+                    'user_id': url[0],
+                    'url': url[1],
+                    'title': url[2],
+                    'visit_count': url[3],
+                    'typed_count': url[4],
+                    'last_visit_time': url[5],
+                    'hidden': url[6],
+                    'favicon_id': url[7],
+                }
+
+                db.execute('INSERT INTO urls (name,user_id,url,title,visit_count,typed_count,last_visit_time,'
+                           'hidden,favicon_id) VALUES (:username,:user_id,:url,:title,:visit_count,:typed_count,'
+                           ':last_visit_time,:hidden,:favicon_id);', url)
+
+            visits = c.execute("SELECT * FROM visits").fetchall()
+
+            for visit in visits:
+                visit = {
+                    'username': username,
+                    'user_id': visit[0],
+                    'url': visit[1],
+                    'visit_time': visit[2],
+                    'from_visit': visit[3],
+                    'transition': visit[4],
+                    'segment_id': visit[5],
+                    'visit_duration': visit[6],
+                }
+
+                db.execute('INSERT INTO visits (name,user_id,url,visit_time,from_visit,transition,segment_id,'
+                           'visit_duration) VALUES (:username,:user_id,:url,:visit_time,:from_visit,:transition,'
+                           ':segment_id,:visit_duration);')
 
 
 class History(object):
@@ -17,6 +85,7 @@ class History(object):
     `urls` contains a list of all urls that the browser has in its history. `visits`
     contains a list of every unique visit to the urls in the `urls` table.
     """
+
     def __init__(self, db_path):
         self.db_path = db_path
         self.db = sqlite3.connect(db_path)
