@@ -14,11 +14,13 @@ class MultiUserHistory(object):
             name = os.path.basename(os.path.normpath(db))
             self.dbs[name] = History(db)
 
+        self.db = None
         self.merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
         self.merge_history()
 
     def merge_history(self):
         db = sqlite3.connect(self.merged_path)
+        self.db = db
 
         # Create combined tables
         db.execute(
@@ -32,8 +34,8 @@ class MultiUserHistory(object):
             'visit_duration INTEGER DEFAULT 0 NOT NULL)'
         )
 
-        for username, db in self.dbs.items():
-            c = db.db.cursor()
+        for username, udb in self.dbs.items():
+            c = udb.db.cursor()
             urls = c.execute("SELECT * FROM urls").fetchall()
 
             for url in urls:
@@ -69,7 +71,16 @@ class MultiUserHistory(object):
 
                 db.execute('INSERT INTO visits (name,user_id,url,visit_time,from_visit,transition,segment_id,'
                            'visit_duration) VALUES (:username,:user_id,:url,:visit_time,:from_visit,:transition,'
-                           ':segment_id,:visit_duration);')
+                           ':segment_id,:visit_duration);', visit)
+
+    def get_url_count(self, username=None):
+        c = self.db.cursor()
+
+        if username:
+            return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username",
+                    {'username': username}).fetchone()[0]
+
+        return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
 
 
 class History(object):
