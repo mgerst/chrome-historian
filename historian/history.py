@@ -23,9 +23,6 @@ class MultiUserHistory(object):
         self.db_paths = db_paths
         self.dbs = {}
         self._db = None
-        for db in db_paths:
-            name = os.path.basename(os.path.normpath(db))
-            self.dbs[name] = History(db)
 
         self.engine = create_engine("sqlite:////{}".format(self.merged_path), convert_unicode=True)
         self.db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=self.engine))
