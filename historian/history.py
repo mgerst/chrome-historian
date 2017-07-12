@@ -3,40 +3,53 @@ import datetime
 import os
 import tempfile
 
+from sqlalchemy.engine import create_engine
+from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import sessionmaker
+
+from historian import models
 from historian.exceptions import DoesNotExist
 
 
 class MultiUserHistory(object):
-    def __init__(self, db_paths):
+    def __init__(self, db_paths, merged_path=None):
+        mkdb = True
+        if not merged_path:
+            merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
+        elif os.path.exists(merged_path):
+            mkdb = False
+
+        self.merged_path = merged_path
         self.db_paths = db_paths
         self.dbs = {}
+        self._db = None
         for db in db_paths:
             name = os.path.basename(os.path.normpath(db))
             self.dbs[name] = History(db)
 
-        self.db = None
+        self.engine = create_engine("sqlite:////{}".format(self.merged_path), convert_unicode=True)
+        self.db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=self.engine))
         self.merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
+
+        if mkdb:
+            print("[Historian] Merging History")
+            self.merge_history()
+        else:
+            print("[Historian] Using existing merged history")
+
         self.merge_history()
 
     def merge_history(self):
-        db = sqlite3.connect(self.merged_path)
-        self.db = db
+        models.Base.metadata.create_all(self.engine)
+        for username, db in self.dbs.items():
+            print("[Historian] {}: Loading history for user".format(username))
+            u = models.User(username=username)
+            self.db_session.add(u)
 
-        # Create combined tables
-        db.execute(
-            'CREATE TABLE urls(id INTEGER PRIMARY KEY,name LONGVARCHAR,user_id INTEGER,'
-            'url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,'
-            'typed_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL,hidden INTEGER DEFAULT 0 NOT NULL,'
-            'favicon_id INTEGER DEFAULT 0 NOT NULL)')
-        db.execute(
-            'CREATE TABLE visits(id INTEGER PRIMARY KEY,name LONGVAR,user_id INTEGER,url INTEGER NOT NULL,'
-            'visit_time INTEGER NOT NULL,from_visit INTEGER,transition INTEGER DEFAULT 0 NOT NULL,segment_id INTEGER,'
-            'visit_duration INTEGER DEFAULT 0 NOT NULL)'
-        )
-
-        for username, udb in self.dbs.items():
-            c = udb.db.cursor()
+            c = db.db.cursor()
             urls = c.execute("SELECT * FROM urls").fetchall()
+
+            urlmap = {}
 
             for url in urls:
                 url = {
@@ -51,9 +64,12 @@ class MultiUserHistory(object):
                     'favicon_id': url[7],
                 }
 
-                db.execute('INSERT INTO urls (name,user_id,url,title,visit_count,typed_count,last_visit_time,'
-                           'hidden,favicon_id) VALUES (:username,:user_id,:url,:title,:visit_count,:typed_count,'
-                           ':last_visit_time,:hidden,:favicon_id);', url)
+                url = models.Url(user=u, local_id=url['user_id'], url=url['url'], title=url['title'],
+                                 visit_count=url['visit_count'], typed_count=url['typed_count'],
+                                 last_visit_time=url['last_visit_time'], hidden=url['hidden'],
+                                 favicon_id=url['favicon_id'])
+                self.db_session.add(url)
+                urlmap[url.local_id] = url
 
             visits = c.execute("SELECT * FROM visits").fetchall()
 
@@ -69,18 +85,101 @@ class MultiUserHistory(object):
                     'visit_duration': visit[6],
                 }
 
-                db.execute('INSERT INTO visits (name,user_id,url,visit_time,from_visit,transition,segment_id,'
-                           'visit_duration) VALUES (:username,:user_id,:url,:visit_time,:from_visit,:transition,'
-                           ':segment_id,:visit_duration);', visit)
+                u = urlmap[visit['url']]
+                v = models.Visit(local_id=visit['user_id'], url=u, visit_time=visit['visit_time'],
+                                 from_visit_id=visit['from_visit'], transition=visit['transition'],
+                                 segment_id=visit['segment_id'], visit_duration=visit['visit_duration'])
+                self.db_session.add(v)
 
-    def get_url_count(self, username=None):
+        self.db_session.commit()
+
+        visits = self.db_session.query(models.Visit).join(models.Url).join(models.User).filter(
+            models.User.username == username).all()
+
+        print("[Historian] {}: Updating from visits".format(username))
+        for visit in visits:
+            self.db_session.query(models.Visit).filter_by(from_visit_id=visit.local_id).update({
+                "from_visit_id": visit.id}, synchronize_session=False)
+
+        self.db_session.commit()
+        print("[Historian] {}: Loaded history".format(username))
+
+    @property
+    def db(self):
+        if not self._db:
+            self._db = sqlite3.connect(self.merged_path)
+        return self._db
+
+    def get_users(self):
+        return self.dbs.keys()
+
+    def get_url_count(self, username):
         c = self.db.cursor()
 
-        if username:
-            return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username",
-                    {'username': username}).fetchone()[0]
+        return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username", {'username': username}).fetchone()[0]
 
-        return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
+    def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None, start=None):
+        """
+        Retrieve all urls for a given username, if a username is not given, get all urls in all users.
+
+        :param str username: Search in this user's database
+        :param int date_lt: Search for all urls last visited before this date
+        :param int date_gt: Search for all urls last visited after this date
+        :param str url_match: Search for urls matching this pattern
+        :param str title_match: Search for urls with titles matching this pattern
+        :param int limit:  Restrict search to this many urls
+        :param int start: Start the search with this offset, can only be used with `limit`
+        """
+        c = self.db.cursor()
+
+        sql = "SELECT * FROM urls"
+        where = []
+        sub = {}
+        if username:
+            where.append("name = :username")
+            sub['username'] = username
+
+        if date_lt:
+            where.append("last_visit_time < :date_lt")
+            sub['date_lt'] = date_lt
+
+        if date_gt:
+            where.append("last_visit_time > :date_gt")
+            sub['date_gt'] = date_gt
+
+        if url_match:
+            where.append("url LIKE :url_match")
+            sub['url_match'] = "%{}%".format(url_match)
+
+        if title_match:
+            where.append("title LIKE :title_match")
+            sub['title_match'] = "%{}%".format(title_match)
+
+        first = True
+        for clause in where:
+            if first:
+                sql += " WHERE "
+                first = False
+            else:
+                sql += " AND "
+            sql += clause
+
+        sql += " ORDER BY last_visit_time DESC"
+
+        if limit:
+            sql += " LIMIT :limit"
+            sub['limit'] = int(limit)
+
+            if start:
+                sql += ", :offset"
+                sub['offset'] = int(start)
+
+        c.execute(sql, sub)
+        urls = []
+        for url in c.fetchall():
+            urls.append(Url(url, self.db))
+
+        return urls
 
 
 class History(object):

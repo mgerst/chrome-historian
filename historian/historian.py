@@ -3,12 +3,17 @@ from argparse import ArgumentParser
 
 from historian.flask import app
 from historian.inspector import InspectorShell
+from historian.history import MultiUserHistory
+from historian.models import Base
+from historian.utils import get_dbs
 
 
 def main():
     parser = ArgumentParser()
     parser.add_argument('-d', '--histories', help='The location of the chrome history files. Defaults to "histories" in'
                         ' the current directory')
+    parser.add_argument('-m', '--merged', help='Location of the merged history DB', default=None)
+    parser.add_argument('-c', '--clean-db', help='Clean merged DB', action='store_true', default=False)
     subparsers = parser.add_subparsers()
 
     webapp = subparsers.add_parser('server', help='Run local web version of historian')
@@ -34,8 +39,17 @@ def run_webapp(args):
     else:
         histories = os.getcwd()
 
+    if args.clean_db and args.merged:
+        if os.path.exists(args.merged):
+            print("[Historian] Remove old merged DB")
+            os.unlink(args.merged)
+
+    dbs = get_dbs(histories)
+
     print("[Historian] Using histories from {}".format(histories))
-    app.config['HISTORIES'] = args.histories
+    hist = MultiUserHistory(dbs, args.merged)
+    Base.query = hist.db_session.query_property()
+    app.config['HISTORIES'] = hist
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 
