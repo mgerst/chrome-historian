@@ -88,18 +88,18 @@ class MultiUserHistory(object):
                                  segment_id=visit['segment_id'], visit_duration=visit['visit_duration'])
                 self.db_session.add(v)
 
-        self.db_session.commit()
+            self.db_session.commit()
 
-        visits = self.db_session.query(models.Visit).join(models.Url).join(models.User).filter(
-            models.User.username == username).all()
+            visits = self.db_session.query(models.Visit).join(models.Url).join(models.User).filter(
+                models.User.username == username).all()
 
-        print("[Historian] {}: Updating from visits".format(username))
-        for visit in visits:
-            self.db_session.query(models.Visit).filter_by(from_visit_id=visit.local_id).update({
-                "from_visit_id": visit.id}, synchronize_session=False)
+            print("[Historian] {}: Updating from visits".format(username))
+            for visit in visits:
+                self.db_session.query(models.Visit).filter_by(from_visit_id=visit.local_id).update({
+                    "from_visit_id": visit.id}, synchronize_session=False)
 
-        self.db_session.commit()
-        print("[Historian] {}: Loaded history".format(username))
+            self.db_session.commit()
+            print("[Historian] {}: Loaded history".format(username))
 
     @property
     def db(self):
