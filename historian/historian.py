@@ -1,9 +1,10 @@
 import os
 from argparse import ArgumentParser
+from pathlib import Path
 
 from historian.flask import app
 from historian.inspector import InspectorShell
-from historian.history import MultiUserHistory
+from historian.history import MultiUserHistory, History
 from historian.models import Base
 from historian.utils import get_dbs
 
@@ -44,10 +45,16 @@ def run_webapp(args):
             print("[Historian] Remove old merged DB")
             os.unlink(args.merged)
 
-    dbs = get_dbs(histories)
+    history_path = Path(histories)
 
-    print("[Historian] Using histories from {}".format(histories))
-    hist = MultiUserHistory(dbs, args.merged)
+    if history_path.is_dir():
+        dbs = get_dbs(histories)
+
+        print("[Historian] Using histories from {}".format(histories))
+        hist = MultiUserHistory(dbs, args.merged)
+    else:
+        print("[Historian] Using history {}".format(histories))
+        hist = History(histories)
     Base.query = hist.db_session.query_property()
     app.config['HISTORIES'] = hist
     app.run(host=args.host, port=args.port, debug=args.debug)

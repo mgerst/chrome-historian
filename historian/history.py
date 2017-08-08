@@ -26,7 +26,6 @@ class MultiUserHistory(object):
 
         self.engine = create_engine("sqlite:////{}".format(self.merged_path), convert_unicode=True)
         self.db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=self.engine))
-        self.merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
 
         if mkdb:
             print("[Historian] Merging History")
@@ -108,12 +107,15 @@ class MultiUserHistory(object):
         return self._db
 
     def get_users(self):
-        return self.dbs.keys()
+        return self.db_session.query(models.User)
 
-    def get_url_count(self, username):
+    def get_url_count(self, username=None):
         c = self.db.cursor()
 
-        return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username", {'username': username}).fetchone()[0]
+        if username:
+            return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username", {'username': username}).fetchone()[0]
+        else:
+            return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
 
     def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None, start=None):
         """
@@ -177,6 +179,9 @@ class MultiUserHistory(object):
             urls.append(Url(url, self.db))
 
         return urls
+
+    def __str__(self):
+        return "<MultiUserHistory merged:{}>".format(self.merged_path)
 
 
 class History(object):
@@ -288,6 +293,9 @@ class History(object):
 
     def close(self):
         self.db.close()
+
+    def __str__(self):
+        return "<History path:{}>".format(self.db_path)
 
 
 class Url(object):

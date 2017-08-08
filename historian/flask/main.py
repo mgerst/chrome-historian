@@ -1,11 +1,14 @@
 import json
+from pathlib import Path
 
 from flask import Flask, render_template, request
 
-from historian.history import History
+from historian.history import History, MultiUserHistory
 from historian.models import db_session
 
 app = Flask(__name__)
+
+
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     db_session.remove()
@@ -19,13 +22,14 @@ def index():
     title_match = request.args.get('title_match', None)
     limit = request.args.get('limit', 25)
     start = request.args.get('start', 0)
+    username = request.args.get('username', None)
 
     if limit:
         limit = int(limit)
     if start:
         start = int(start)
 
-    hist = History(app.config['HISTORIES'])
+    hist = app.config['HISTORIES']
 
     will_paginate = False
     url_count = hist.get_url_count()
@@ -36,14 +40,17 @@ def index():
     hist.get_urls(date_lt=date_lt, date_gt=date_gt, url_match=url_match, title_match=title_match, limit=limit,
                   start=start)
 
+    users = [u.username for u in hist.get_users()]
+    user = hist.get_user(username)
+
     return render_template('index.html', hist=hist, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
                            title_match=title_match, will_paginate=will_paginate, limit=limit, start=start,
-                           url_count=url_count)
+                           url_count=url_count, users=users, current_user=user)
 
 
 @app.route('/graph/<id>')
 def graph(id):
-    hist = History(app.config['HISTORIES'])
+    hist = app.config['HISTORIES']
     url = hist.get_url_by_id(id)
 
     return render_template('view_graph.html', hist=hist, url=url)
@@ -51,7 +58,7 @@ def graph(id):
 
 @app.route('/graph/<id>/json')
 def graph_ajax(id):
-    hist = History(app.config['HISTORIES'])
+    hist = app.config['HISTORIES']
     url = hist.get_url_by_id(id)
     visits = set(url.visits)
     data = []
@@ -84,3 +91,10 @@ def graph_ajax(id):
             left = False
 
     return json.dumps(data)
+
+
+@app.route('/user/')
+def user_list():
+    hist = app.config['HISTORIES']
+    users = [user.username for user in hist.get_users()]
+    return json.dumps(users)
