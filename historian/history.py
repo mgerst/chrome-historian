@@ -1,32 +1,25 @@
-import sqlite3
 import datetime
-import os
-import tempfile
 import pathlib
+import sqlite3
+import tempfile
+from collections import namedtuple
 
 from historian.exceptions import DoesNotExist
+from historian.utils import hash_file
+
+UserRecord = namedtuple('UserRecord', 'id,name,hash')
 
 
 class MultiUserHistory(object):
     def __init__(self, db_paths, merged_path=None):
-        mkdb = True
         if not merged_path:
             merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
-        elif os.path.exists(merged_path):
-            mkdb = False
 
-        self.merged_path = merged_path
+        self.merged_path = pathlib.Path(merged_path)
         self.db_paths = map(pathlib.Path, db_paths)
         self.dbs = {}
         self._db = None
         self.find_histories()
-
-        if mkdb:
-            print("[Historian] Merging History")
-            self.merge_history()
-        else:
-            print("[Historian] Using existing merged history")
-
         self.merge_history()
 
     def find_histories(self):
@@ -34,20 +27,56 @@ class MultiUserHistory(object):
             self.dbs[path.name] = path
 
     def merge_history(self):
-        # Create the merged database if it doesn't exist
+        print("[Historian] Merging History")
+        if not self.merged_path.exists():
+            print("[Historian] Creating merged database")
+            cur = self.db.cursor()
+            with open(pathlib.Path(__file__).parent / 'merged.sql', 'r') as fp:
+                sql = fp.read()
+                cur.executescript(sql)
+            self.db.commit()
 
-        # Load hashes of already merged histories
-
-        # Loop over each user
         for username, db in self.dbs.items():
+            cur = self.db.cursor()
             print("[Historian] {}: Loading history for user".format(username))
-            # calculate hash of history
+            hash = hash_file(str(db))
 
+            cur.execute('SELECT * FROM users WHERE name=:username', {'username': username})
+            user = cur.fetchone()
+            if not user:
+                cur.execute("INSERT INTO users (name, hash) VALUES (:username, :hash)",
+                            {'username': username, 'hash': hash})
+                cur.execute("SELECT * FROM users WHERE name=:username", {'username': username})
+                user = cur.fetchone()
+                # Force historian to update never seen histories
+                hash = None
+            user = UserRecord(*user)
+            self.db.commit()
+
+            if user.hash == hash:
+                print("[Historian] {} already loaded and latest version".format(username))
+                continue
+
+            # This allows us to perform the import in sqlite, rather than in python
+            cur.execute("ATTACH ? AS userdb", (str(db),))
+
+            cur.execute(
+                "INSERT INTO urls SELECT p.id, u.id, u.url, u.title, u.visit_count, u.typed_count, u.last_visit_time, u.hidden, u.favicon_id FROM userdb.urls AS u LEFT JOIN users AS p ON p.name = :username",
+                {'username': username})
+            cur.execute(
+                "INSERT INTO visits SELECT u.id, v.id, v.url, v.visit_time, v.from_visit, v.transition, v.segment_id, v.visit_duration FROM userdb.visits AS v LEFT JOIN users AS u ON u.name = :username",
+                {'username': username})
+            cur.execute(
+                "INSERT INTO visit_source SELECT u.id, v.id, v.source FROM userdb.visit_source AS v LEFT JOIN users AS u ON u.name = :username",
+                {'username': username})
+
+            self.db.commit()
+            cur.execute("DETACH userdb")
 
     @property
     def db(self):
         if not self._db:
-            self._db = sqlite3.connect(self.merged_path)
+            self._db = sqlite3.connect(str(self.merged_path))
         return self._db
 
     def get_url_count(self, username=None):
@@ -58,7 +87,8 @@ class MultiUserHistory(object):
         else:
             return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
 
-    def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None, start=None):
+    def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None,
+                 start=None):
         """
         Retrieve all urls for a given username, if a username is not given, get all urls in all users.
 
