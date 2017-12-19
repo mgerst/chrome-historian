@@ -96,7 +96,10 @@ class InspectorShell(BaseShell):
     def get_prompt(self):
         pmpt = "historian"
         if self.hist:
-            pmpt += " [{}]".format(self.hist.db_path)
+            if isinstance(self.hist, MultiUserHistory):
+                pmpt += " [{}]".format(self.hist.merged_path)
+            else:
+                pmpt += " [{}]".format(self.hist.db_path)
 
         return pmpt + "> "
 
