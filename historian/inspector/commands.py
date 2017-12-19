@@ -135,7 +135,7 @@ class DBShell(SubShell):
         :return:
         """
         super(DBShell, self).__init__(parent, *args, **kwargs)
-        if not isinstance(hist, History):
+        if not isinstance(hist, (History, MultiUserHistory)):
             hist = History(hist)
 
         self.hist = hist
