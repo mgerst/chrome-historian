@@ -2,12 +2,8 @@ import sqlite3
 import datetime
 import os
 import tempfile
+import pathlib
 
-from sqlalchemy.engine import create_engine
-from sqlalchemy.orm import scoped_session
-from sqlalchemy.orm import sessionmaker
-
-from historian import models
 from historian.exceptions import DoesNotExist
 
 
@@ -20,12 +16,10 @@ class MultiUserHistory(object):
             mkdb = False
 
         self.merged_path = merged_path
-        self.db_paths = db_paths
+        self.db_paths = map(pathlib.Path, db_paths)
         self.dbs = {}
         self._db = None
-
-        self.engine = create_engine("sqlite:////{}".format(self.merged_path), convert_unicode=True)
-        self.db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=self.engine))
+        self.find_histories()
 
         if mkdb:
             print("[Historian] Merging History")
@@ -35,79 +29,26 @@ class MultiUserHistory(object):
 
         self.merge_history()
 
+    def find_histories(self):
+        for path in self.db_paths:
+            self.dbs[path.name] = path
+
     def merge_history(self):
-        models.Base.metadata.create_all(self.engine)
+        # Create the merged database if it doesn't exist
+
+        # Load hashes of already merged histories
+
+        # Loop over each user
         for username, db in self.dbs.items():
             print("[Historian] {}: Loading history for user".format(username))
-            u = models.User(username=username)
-            self.db_session.add(u)
+            # calculate hash of history
 
-            c = db.db.cursor()
-            urls = c.execute("SELECT * FROM urls").fetchall()
-
-            urlmap = {}
-
-            for url in urls:
-                url = {
-                    'username': username,
-                    'user_id': url[0],
-                    'url': url[1],
-                    'title': url[2],
-                    'visit_count': url[3],
-                    'typed_count': url[4],
-                    'last_visit_time': url[5],
-                    'hidden': url[6],
-                    'favicon_id': url[7],
-                }
-
-                url = models.Url(user=u, local_id=url['user_id'], url=url['url'], title=url['title'],
-                                 visit_count=url['visit_count'], typed_count=url['typed_count'],
-                                 last_visit_time=url['last_visit_time'], hidden=url['hidden'],
-                                 favicon_id=url['favicon_id'])
-                self.db_session.add(url)
-                urlmap[url.local_id] = url
-
-            visits = c.execute("SELECT * FROM visits").fetchall()
-
-            for visit in visits:
-                visit = {
-                    'username': username,
-                    'user_id': visit[0],
-                    'url': visit[1],
-                    'visit_time': visit[2],
-                    'from_visit': visit[3],
-                    'transition': visit[4],
-                    'segment_id': visit[5],
-                    'visit_duration': visit[6],
-                }
-
-                u = urlmap[visit['url']]
-                v = models.Visit(local_id=visit['user_id'], url=u, visit_time=visit['visit_time'],
-                                 from_visit_id=visit['from_visit'], transition=visit['transition'],
-                                 segment_id=visit['segment_id'], visit_duration=visit['visit_duration'])
-                self.db_session.add(v)
-
-            self.db_session.commit()
-
-            visits = self.db_session.query(models.Visit).join(models.Url).join(models.User).filter(
-                models.User.username == username).all()
-
-            print("[Historian] {}: Updating from visits".format(username))
-            for visit in visits:
-                self.db_session.query(models.Visit).filter_by(from_visit_id=visit.local_id).update({
-                    "from_visit_id": visit.id}, synchronize_session=False)
-
-            self.db_session.commit()
-            print("[Historian] {}: Loaded history".format(username))
 
     @property
     def db(self):
         if not self._db:
             self._db = sqlite3.connect(self.merged_path)
         return self._db
-
-    def get_users(self):
-        return self.db_session.query(models.User)
 
     def get_url_count(self, username=None):
         c = self.db.cursor()

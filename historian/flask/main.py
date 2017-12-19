@@ -4,14 +4,8 @@ from pathlib import Path
 from flask import Flask, render_template, request
 
 from historian.history import History, MultiUserHistory
-from historian.models import db_session
 
 app = Flask(__name__)
-
-
-@app.teardown_appcontext
-def shutdown_session(exception=None):
-    db_session.remove()
 
 
 @app.route('/')

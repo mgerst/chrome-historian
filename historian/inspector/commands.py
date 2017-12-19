@@ -1,8 +1,11 @@
 import cmd
 
+from pathlib import Path
+
 from historian.exceptions import DoesNotExist
-from historian.history import History
+from historian.history import History, MultiUserHistory
 from historian.inspector import utils
+from historian.utils import get_dbs
 
 
 class BaseShell(cmd.Cmd):
@@ -83,7 +86,12 @@ class InspectorShell(BaseShell):
         super(InspectorShell, self).__init__(*args, **kwargs)
         self.parser_args = pargs
         # TODO: This will need to handle multiple
-        self.hist = History(pargs.histories)
+        history_path = Path(pargs.histories)
+        if history_path.is_dir():
+            dbs = get_dbs(history_path)
+            self.hist = MultiUserHistory(dbs, pargs.merged)
+        else:
+            self.hist = History(pargs.histories)
 
     def get_prompt(self):
         pmpt = "historian"

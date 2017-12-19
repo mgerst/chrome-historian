@@ -5,7 +5,6 @@ from pathlib import Path
 from historian.flask import app
 from historian.inspector import InspectorShell
 from historian.history import MultiUserHistory, History
-from historian.models import Base
 from historian.utils import get_dbs
 
 
@@ -55,7 +54,6 @@ def run_webapp(args):
     else:
         print("[Historian] Using history {}".format(histories))
         hist = History(histories)
-    Base.query = hist.db_session.query_property()
     app.config['HISTORIES'] = hist
     app.run(host=args.host, port=args.port, debug=args.debug)
 
