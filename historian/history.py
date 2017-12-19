@@ -5,8 +5,11 @@ import tempfile
 from collections import namedtuple
 from typing import List
 
+from peewee import fn
+
 from historian.exceptions import DoesNotExist
 from historian.utils import hash_file
+from .models import database, User, Urls, Visits, VisitSource
 
 UserRecord = namedtuple('UserRecord', 'id,username,hash')
 
@@ -16,71 +19,56 @@ class MultiUserHistory(object):
         if not merged_path:
             merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
 
+        # Setup PeeWee with given path
+        database.init(merged_path)
         self.merged_path = pathlib.Path(merged_path)
-        self.db_paths = map(pathlib.Path, db_paths)
+        db_paths = map(pathlib.Path, db_paths)
         self.dbs = {}
-        self._db = None
-        self.find_histories()
+        self.find_histories(db_paths)
         self.merge_history()
 
-    def find_histories(self):
-        for path in self.db_paths:
+    def find_histories(self, db_paths):
+        for path in db_paths:
             self.dbs[path.name] = path
 
     def merge_history(self):
         print("[Historian] Merging History")
         if not self.merged_path.exists():
+            database.connect()
             print("[Historian] Creating merged database")
-            cur = self.db.cursor()
-            with open(pathlib.Path(__file__).parent / 'merged.sql', 'r') as fp:
-                sql = fp.read()
-                cur.executescript(sql)
-            self.db.commit()
+            database.create_tables([User, Urls, Visits, VisitSource])
 
         for username, db in self.dbs.items():
-            cur = self.db.cursor()
             print("[Historian] {}: Loading history for user".format(username))
             hash = hash_file(str(db))
 
-            cur.execute('SELECT * FROM users WHERE name=:username', {'username': username})
-            user = cur.fetchone()
-            if not user:
-                cur.execute("INSERT INTO users (name, hash) VALUES (:username, :hash)",
-                            {'username': username, 'hash': hash})
-                cur.execute("SELECT * FROM users WHERE name=:username", {'username': username})
-                user = cur.fetchone()
+            if User.select().where(User.name == username).count() < 1:
+                User.create(name=username, hash=hash)
                 # Force historian to update never seen histories
                 hash = None
-            user = UserRecord(*user)
-            self.db.commit()
+            user = User.select().where(User.name == username).get()
 
             if user.hash == hash:
                 print("[Historian] {} already loaded and latest version".format(username))
                 continue
 
             # This allows us to perform the import in sqlite, rather than in python
-            cur.execute("ATTACH ? AS userdb", (str(db),))
+            database.execute_sql("ATTACH ? AS userdb", (str(db),))
 
-            cur.execute(
-                "INSERT INTO urls SELECT p.id, u.id, u.url, u.title, u.visit_count, u.typed_count, u.last_visit_time, u.hidden, u.favicon_id FROM userdb.urls AS u LEFT JOIN users AS p ON p.name = :username",
+            database.execute_sql(
+                "INSERT INTO urls (user_id, id, url, title, visit_count, typed_count, last_visit_time, hidden, favicon_id) "
+                "SELECT p.id, u.id, u.url, u.title, u.visit_count, u.typed_count, u.last_visit_time, u.hidden, u.favicon_id FROM userdb.urls AS u LEFT JOIN users AS p ON p.name = :username",
                 {'username': username})
-            cur.execute(
-                "INSERT INTO visits SELECT u.id, v.id, v.url, v.visit_time, v.from_visit, v.transition, v.segment_id, v.visit_duration FROM userdb.visits AS v LEFT JOIN users AS u ON u.name = :username",
+            database.execute_sql(
+                "INSERT INTO visits (user_id, id, url, visit_time, from_visit, transition, segment_id, visit_duration) "
+                "SELECT u.id, v.id, v.url, v.visit_time, v.from_visit, v.transition, v.segment_id, v.visit_duration FROM userdb.visits AS v LEFT JOIN users AS u ON u.name = :username",
                 {'username': username})
-            cur.execute(
-                "INSERT INTO visit_source SELECT u.id, v.id, v.source FROM userdb.visit_source AS v LEFT JOIN users AS u ON u.name = :username",
-                {'username': username})
+            database.execute_sql(
+                "INSERT INTO visit_source (user_id, id, source)  SELECT u.id, v.id, v.source FROM userdb.visit_source AS v LEFT JOIN users AS u ON u.name = :username",
+                {'username': username}, require_commit=True)
 
-            self.db.commit()
-            cur.execute("DETACH userdb")
-        self.db.close()
-        self._db = None
-
-    @property
-    def db(self):
-        if not self._db:
-            self._db = sqlite3.connect(str(self.merged_path))
-        return self._db
+            database.execute_sql("DETACH userdb")
+        database.close()
 
     def get_users(self) -> List[UserRecord]:
         cur = self.db.cursor()
