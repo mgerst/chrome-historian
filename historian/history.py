@@ -71,18 +71,18 @@ class MultiUserHistory(object):
         database.close()
 
     def get_users(self) -> List[UserRecord]:
-        cur = self.db.cursor()
-        cur.execute("SELECT * FROM users")
-        users = cur.fetchall()
-        return list(map(lambda u: UserRecord(*u), users))
+        users = User.select()
+        return list(users)
 
     def get_url_count(self, username=None):
-        c = self.db.cursor()
-
         if username:
-            return c.execute("SELECT COUNT(*) FROM urls WHERE name=:username", {'username': username}).fetchone()[0]
+            user = User.select().where(User.name == username).get()
+            return Urls.select().where(Urls.user == user).count()
         else:
-            return c.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
+            return Urls.select().count()
+
+    def get_url_by_id(self, id: int) -> Urls:
+        return Urls.select().where(Urls.id == id).get()
 
     def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None,
                  start=None):
@@ -97,59 +97,37 @@ class MultiUserHistory(object):
         :param int limit:  Restrict search to this many urls
         :param int start: Start the search with this offset, can only be used with `limit`
         """
-        c = self.db.cursor()
-
         sql = "SELECT * FROM urls"
         where = []
-        sub = {}
+        query = Urls.select()
+
         if username:
-            c.execute("select id from users where name = :username", {'username': username})
-            user = c.fetchone()
-            where.append("user_id = :userid")
-            sub['userid'] = user[0]
+            user = User.select().where(User.name == username).get()
+            where.append(Urls.user == user)
+            query = query.join(User)
 
         if date_lt:
-            where.append("last_visit_time < :date_lt")
-            sub['date_lt'] = date_lt
+            where.append(Urls.last_visit_time < date_lt)
 
         if date_gt:
-            where.append("last_visit_time > :date_gt")
-            sub['date_gt'] = date_gt
+            where.append(Urls.last_visit_time > date_gt)
 
         if url_match:
-            where.append("url LIKE :url_match")
-            sub['url_match'] = "%{}%".format(url_match)
+            where.append(Urls.url ** '%{}%'.format(url_match))
 
         if title_match:
-            where.append("title LIKE :title_match")
-            sub['title_match'] = "%{}%".format(title_match)
+            where.append(Urls.title ** '%{}%'.format(title_match))
 
-        first = True
-        for clause in where:
-            if first:
-                sql += " WHERE "
-                first = False
-            else:
-                sql += " AND "
-            sql += clause
-
-        sql += " ORDER BY last_visit_time DESC"
+        if len(where) > 0:
+            query = query.where(*where)
 
         if limit:
-            sql += " LIMIT :limit"
-            sub['limit'] = int(limit)
+            query = query.limit(int(limit))
 
             if start:
-                sql += ", :offset"
-                sub['offset'] = int(start)
+                query = query.offset(int(start))
 
-        print(sql, sub)
-        c.execute(sql, sub)
-        urls = []
-        for url in c.fetchall():
-            urls.append(Url(url, self.db))
-
-        return urls
+        return list(query)
 
     def __str__(self):
         return "<MultiUserHistory merged:{}>".format(self.merged_path)

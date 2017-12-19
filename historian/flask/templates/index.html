@@ -49,7 +49,7 @@
                 <tbody>
                 {% for url in urls %}
                     <tr>
-                        <td>{{ url.user_id }}</td>
+                        <td>{{ url.user.name }}</td>
                         <td>{{ url.url }}</td>
                         <td>{{ url.title }}</td>
                         <td title="{{ url.last_visit_time_raw }}">{{ url.last_visit_time }}</td>
