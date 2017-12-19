@@ -1,7 +1,136 @@
-import sqlite3
 import datetime
+import pathlib
+import sqlite3
+import tempfile
+from collections import namedtuple
+from typing import List
+
+from peewee import fn
 
 from historian.exceptions import DoesNotExist
+from historian.utils import hash_file
+from .models import database, User, Urls, Visits, VisitSource
+
+UserRecord = namedtuple('UserRecord', 'id,username,hash')
+
+
+class MultiUserHistory(object):
+    def __init__(self, db_paths, merged_path=None):
+        if not merged_path:
+            merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
+
+        # Setup PeeWee with given path
+        database.init(merged_path)
+        self.merged_path = pathlib.Path(merged_path)
+        db_paths = map(pathlib.Path, db_paths)
+        self.dbs = {}
+        self.find_histories(db_paths)
+        self.merge_history()
+
+    def find_histories(self, db_paths):
+        for path in db_paths:
+            self.dbs[path.name] = path
+
+    def merge_history(self):
+        print("[Historian] Merging History")
+        if not self.merged_path.exists():
+            database.connect()
+            print("[Historian] Creating merged database")
+            database.create_tables([User, Urls, Visits, VisitSource])
+
+        for username, db in self.dbs.items():
+            print("[Historian] {}: Loading history for user".format(username))
+            hash = hash_file(str(db))
+
+            if User.select().where(User.name == username).count() < 1:
+                User.create(name=username, hash=hash)
+                # Force historian to update never seen histories
+                hash = None
+            user = User.select().where(User.name == username).get()
+
+            if user.hash == hash:
+                print("[Historian] {} already loaded and latest version".format(username))
+                continue
+
+            # This allows us to perform the import in sqlite, rather than in python
+            database.execute_sql("ATTACH ? AS userdb", (str(db),))
+
+            database.execute_sql(
+                "INSERT INTO urls (user_id, id, url, title, visit_count, typed_count, last_visit_time, hidden, favicon_id) "
+                "SELECT p.id, u.id, u.url, u.title, u.visit_count, u.typed_count, u.last_visit_time, u.hidden, u.favicon_id FROM userdb.urls AS u LEFT JOIN users AS p ON p.name = :username",
+                {'username': username})
+            database.execute_sql(
+                "INSERT INTO visits (user_id, id, url, visit_time, from_visit, transition, segment_id, visit_duration) "
+                "SELECT u.id, v.id, v.url, v.visit_time, v.from_visit, v.transition, v.segment_id, v.visit_duration FROM userdb.visits AS v LEFT JOIN users AS u ON u.name = :username",
+                {'username': username})
+            database.execute_sql(
+                "INSERT INTO visit_source (user_id, id, source)  SELECT u.id, v.id, v.source FROM userdb.visit_source AS v LEFT JOIN users AS u ON u.name = :username",
+                {'username': username}, require_commit=True)
+
+            database.execute_sql("DETACH userdb")
+        database.close()
+
+    def get_users(self) -> List[UserRecord]:
+        users = User.select()
+        return list(users)
+
+    def get_url_count(self, username=None):
+        if username:
+            user = User.select().where(User.name == username).get()
+            return Urls.select().where(Urls.user == user).count()
+        else:
+            return Urls.select().count()
+
+    def get_url_by_id(self, id: int) -> Urls:
+        return Urls.select().where(Urls.id == id).get()
+
+    def get_urls(self, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None,
+                 start=None):
+        """
+        Retrieve all urls for a given username, if a username is not given, get all urls in all users.
+
+        :param str username: Search in this user's database
+        :param int date_lt: Search for all urls last visited before this date
+        :param int date_gt: Search for all urls last visited after this date
+        :param str url_match: Search for urls matching this pattern
+        :param str title_match: Search for urls with titles matching this pattern
+        :param int limit:  Restrict search to this many urls
+        :param int start: Start the search with this offset, can only be used with `limit`
+        """
+        sql = "SELECT * FROM urls"
+        where = []
+        query = Urls.select()
+
+        if username:
+            user = User.select().where(User.name == username).get()
+            where.append(Urls.user == user)
+            query = query.join(User)
+
+        if date_lt:
+            where.append(Urls.last_visit_time < date_lt)
+
+        if date_gt:
+            where.append(Urls.last_visit_time > date_gt)
+
+        if url_match:
+            where.append(Urls.url ** '%{}%'.format(url_match))
+
+        if title_match:
+            where.append(Urls.title ** '%{}%'.format(title_match))
+
+        if len(where) > 0:
+            query = query.where(*where)
+
+        if limit:
+            query = query.limit(int(limit))
+
+            if start:
+                query = query.offset(int(start))
+
+        return list(query)
+
+    def __str__(self):
+        return "<MultiUserHistory merged:{}>".format(self.merged_path)
 
 
 class History(object):
@@ -17,6 +146,7 @@ class History(object):
     `urls` contains a list of all urls that the browser has in its history. `visits`
     contains a list of every unique visit to the urls in the `urls` table.
     """
+
     def __init__(self, db_path):
         self.db_path = db_path
         self.db = sqlite3.connect(db_path)
@@ -113,20 +243,24 @@ class History(object):
     def close(self):
         self.db.close()
 
+    def __str__(self):
+        return "<History path:{}>".format(self.db_path)
+
 
 class Url(object):
     def __init__(self, row, db):
         self._db = db
         self._visits = None
 
-        self.id = row[0]
-        self.url = row[1]
-        self.title = row[2]
-        self.visit_count = row[3]
-        self.typed_count = row[4]
-        self.last_visit_time_raw = row[5]
-        self.hidden = row[6]
-        self.favicon_id = row[7]
+        self.user_id = row[0]
+        self.id = row[1]
+        self.url = row[2]
+        self.title = row[3]
+        self.visit_count = row[4]
+        self.typed_count = row[5]
+        self.last_visit_time_raw = row[6]
+        self.hidden = row[7]
+        self.favicon_id = row[8]
 
     @property
     def visits(self):

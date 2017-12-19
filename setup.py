@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from setuptools import setup, find_packages
 
 setup(
@@ -7,8 +8,13 @@ setup(
     packages=find_packages(),
     include_Package_data=True,
     zip_safe=False,
+
+    setup_requires=[
+        'flake8',
+    ],
     install_requires=[
         'Flask',
+        'peewee==2.10.2',
     ],
     entry_points={
         'console_scripts': ['chrome-historian=historian.historian:main'],
