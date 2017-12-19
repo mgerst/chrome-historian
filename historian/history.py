@@ -3,11 +3,12 @@ import pathlib
 import sqlite3
 import tempfile
 from collections import namedtuple
+from typing import List
 
 from historian.exceptions import DoesNotExist
 from historian.utils import hash_file
 
-UserRecord = namedtuple('UserRecord', 'id,name,hash')
+UserRecord = namedtuple('UserRecord', 'id,username,hash')
 
 
 class MultiUserHistory(object):
@@ -72,12 +73,20 @@ class MultiUserHistory(object):
 
             self.db.commit()
             cur.execute("DETACH userdb")
+        self.db.close()
+        self._db = None
 
     @property
     def db(self):
         if not self._db:
             self._db = sqlite3.connect(str(self.merged_path))
         return self._db
+
+    def get_users(self) -> List[UserRecord]:
+        cur = self.db.cursor()
+        cur.execute("SELECT * FROM users")
+        users = cur.fetchall()
+        return list(map(lambda u: UserRecord(*u), users))
 
     def get_url_count(self, username=None):
         c = self.db.cursor()
@@ -106,8 +115,10 @@ class MultiUserHistory(object):
         where = []
         sub = {}
         if username:
-            where.append("name = :username")
-            sub['username'] = username
+            c.execute("select id from users where name = :username", {'username': username})
+            user = c.fetchone()
+            where.append("user_id = :userid")
+            sub['userid'] = user[0]
 
         if date_lt:
             where.append("last_visit_time < :date_lt")
@@ -144,6 +155,7 @@ class MultiUserHistory(object):
                 sql += ", :offset"
                 sub['offset'] = int(start)
 
+        print(sql, sub)
         c.execute(sql, sub)
         urls = []
         for url in c.fetchall():
@@ -274,14 +286,15 @@ class Url(object):
         self._db = db
         self._visits = None
 
-        self.id = row[0]
-        self.url = row[1]
-        self.title = row[2]
-        self.visit_count = row[3]
-        self.typed_count = row[4]
-        self.last_visit_time_raw = row[5]
-        self.hidden = row[6]
-        self.favicon_id = row[7]
+        self.user_id = row[0]
+        self.id = row[1]
+        self.url = row[2]
+        self.title = row[3]
+        self.visit_count = row[4]
+        self.typed_count = row[5]
+        self.last_visit_time_raw = row[6]
+        self.hidden = row[7]
+        self.favicon_id = row[8]
 
     @property
     def visits(self):

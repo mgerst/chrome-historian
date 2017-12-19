@@ -38,6 +38,7 @@
             <table class="table table-bordered">
                 <thead>
                 <tr>
+                    <th>User</th>
                     <th>Url</th>
                     <th>Title</th>
                     <th>Last Visit</th>
@@ -46,10 +47,11 @@
                 </tr>
                 </thead>
                 <tbody>
-                {% for url in hist.urls %}
+                {% for url in urls %}
                     <tr>
-                        <td>{{ url.url|truncate(50) }}</td>
-                        <td>{{ url.title|truncate(50) }}</td>
+                        <td>{{ url.user_id }}</td>
+                        <td>{{ url.url }}</td>
+                        <td>{{ url.title }}</td>
                         <td title="{{ url.last_visit_time_raw }}">{{ url.last_visit_time }}</td>
                         <td>{{ url.visit_count }}</td>
                         <td>
@@ -58,7 +60,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="5">No Urls in History</td>
+                        <td colspan="6">No Urls in History</td>
                     </tr>
                 {% endfor %}
                 </tbody>

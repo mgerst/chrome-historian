@@ -1,9 +1,6 @@
 import json
-from pathlib import Path
 
 from flask import Flask, render_template, request
-
-from historian.history import History, MultiUserHistory
 
 app = Flask(__name__)
 
@@ -34,12 +31,14 @@ def index():
     hist.get_urls(date_lt=date_lt, date_gt=date_gt, url_match=url_match, title_match=title_match, limit=limit,
                   start=start)
 
-    users = [u.username for u in hist.get_users()]
-    user = hist.get_user(username)
+    user_list = hist.get_users()
+    users = [u.username for u in user_list]
+    user = list(filter(lambda u: u.username == username, user_list))[0] if username in users else None
+    urls = hist.get_urls(username, date_lt, date_gt, url_match, title_match, limit, start)
 
     return render_template('index.html', hist=hist, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
                            title_match=title_match, will_paginate=will_paginate, limit=limit, start=start,
-                           url_count=url_count, users=users, current_user=user)
+                           url_count=url_count, users=users, current_user=user, urls=urls)
 
 
 @app.route('/graph/<id>')
