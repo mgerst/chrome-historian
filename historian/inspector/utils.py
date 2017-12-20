@@ -7,10 +7,13 @@ def print_visit(visit, full=False):
     """
     rows = []
     rows.append(['Visit', visit.id])
-    rows.append(['Timestamp', visit.visit_time])
+    rows.append(['Timestamp', visit.visited])
+    rows.append(['URL (ID)', visit.url])
 
     if full:
-        rows.append(['Transition', visit.transition])
+        rows.append(['URL (FULL)', visit.url_obj.url])
+        rows.append(['Transition Type', visit.transition_core])
+        rows.append(['Transition Flags', visit.transition_qualifier])
         rows.append(['From Visit', visit.from_visit])
         rows.append(['Visit Duration', visit.visit_duration])
 

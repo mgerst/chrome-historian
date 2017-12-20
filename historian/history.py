@@ -157,6 +157,9 @@ class MultiUserHistory(object):
     def get_visit_count(self) -> int:
         return Visits.select().count()
 
+    def get_visit_by_id(self, visit_id: int, user_id: int) -> Visits:
+        return Visits.select().where(Visits.user == user_id, Visits.id == visit_id).get()
+
     def __str__(self):
         return "<MultiUserHistory merged:{}>".format(self.merged_path)
 

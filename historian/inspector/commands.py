@@ -329,6 +329,10 @@ class URLShell(SubShell):
         self.parent.cmdqueue.append("inspect {}".format(args))
         return True
 
+    def do_visit(self, args):
+        visit = self.hist.get_visit_by_id(args, user_id=self.user.id)
+        utils.print_visit(visit, True)
+
 
 class DBShell(SubShell):
     custom_prompt = "historian>DB> "
