@@ -1,6 +1,10 @@
 import cmd
-
+import shlex
+import shutil
 from pathlib import Path
+
+from subprocess import Popen, PIPE
+from terminaltables import AsciiTable
 
 from historian.exceptions import DoesNotExist
 from historian.history import History, MultiUserHistory
@@ -36,6 +40,23 @@ class BaseShell(cmd.Cmd):
         if isinstance(clz, type(SubShell)):
             ss = clz(self, *args, **kwargs)
             ss.cmdloop()
+
+    @staticmethod
+    def page_output(output, output_height=None):
+        term_size = shutil.get_terminal_size((80, 20))
+        if not output_height:
+            output_height = len(output.split('\n'))
+
+        if term_size.lines < output_height:
+            process = Popen(["less"], stdin=PIPE)
+
+            try:
+                process.stdin.write(output.encode('utf-8'))
+                process.communicate()
+            except IOError as e:
+                pass
+        else:
+            print(output)
 
 
 class SubShell(BaseShell):
@@ -83,45 +104,194 @@ class InspectorShell(BaseShell):
     hist = None
 
     def __init__(self, pargs, *args, **kwargs):
-        super(InspectorShell, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.parser_args = pargs
-        # TODO: This will need to handle multiple
         history_path = Path(pargs.histories)
         if history_path.is_dir():
             dbs = get_dbs(history_path)
             self.hist = MultiUserHistory(dbs, pargs.merged)
         else:
-            self.hist = History(pargs.histories)
+            username = history_path.name
+            self.hist = History(pargs.histories, username)
 
     def get_prompt(self):
         pmpt = "historian"
         if self.hist:
-            if isinstance(self.hist, MultiUserHistory):
-                pmpt += " [{}]".format(self.hist.merged_path)
+            if isinstance(self.hist, History):
+                pmpt += " [{}*]".format(self.hist.db_path)
             else:
-                pmpt += " [{}]".format(self.hist.db_path)
+                pmpt += " [{}]".format(self.hist.merged_path)
 
         return pmpt + "> "
 
     def do_load(self, arg):
-        self.hist = History(arg)
+        """load HISTORY USERNAME"""
+        parts = arg.split()
+        if len(parts) != 2:
+            print("[!!] Invalid number of arguments: load HISTORY USERNAME")
+        history, username = parts
+        self.hist = History(history, username)
 
     def do_unload(self, arg):
+        """Unloads the current history"""
         self.hist.close()
         self.hist = None
 
     def do_db(self, arg):
+        """Switch contexts to the History Shell"""
         if self.hist:
-            self.spawn_subshell(DBShell, hist=self.hist)
+            self.spawn_subshell(HistoryShell, hist=self.hist)
         else:
             print("[!!] No Loaded DB")
 
     def do_enter(self, arg):
-        self.spawn_subshell(DBShell, hist=self.hist)
+        """Switch contexts to the History Shell"""
+        self.do_db(arg)
 
-    def postloop(self):
-        if self.hist:
-            self.hist.close()
+
+class HistoryShell(SubShell):
+    custom_prompt = "historian>DB> "
+
+    def __init__(self, parent, hist, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.hist = hist
+
+    def do_user(self, arg):
+        """Load the history for the given user"""
+        try:
+            user_id = int(arg)
+            user = self.hist.get_user(user_id=user_id)
+        except ValueError:
+            user = self.hist.get_user(username=arg)
+        self.spawn_subshell(UserShell, hist=self.hist, user=user)
+
+    def do_merge(self, arg):
+        """
+        merge HISTORYPATH [USERNAME]
+
+        Merges the specified history into the multi user history
+        """
+        if isinstance(self.hist, History):
+            print("[!!] Not Valid for MultiUserHistory")
+            return
+
+    def do_list(self, arg):
+        """Lists the available users"""
+        users = self.hist.get_users()
+        users = [[user.id, user.name] for user in users]
+        users = [["ID", "Username"]] + users
+        table = AsciiTable(users, "All Users")
+        print(table.table)
+
+    def do_stats(self, arg):
+        """Lists some statistics about the merged database"""
+        user_count = self.hist.get_user_count()
+        url_count = self.hist.get_url_count()
+        visit_count = self.hist.get_visit_count()
+        table = AsciiTable([
+            ["Users", user_count],
+            ["Urls", url_count],
+            ["Visits", visit_count]
+        ], "Stats")
+        table.inner_heading_row_border = False
+        print(table.table)
+
+    def do_search(self, args):
+        """
+        search TYPE CRITERIA
+
+            TYPE := url|title
+            TYPE determines what type of entity is being searched.
+
+            CRITERIA is what to search against.
+
+        Example:
+            search url github.com
+            search title "API Reference"
+        """
+        parts = shlex.split(args)
+        if len(parts) != 2:
+            print("[!!] Usage: search TYPE CRITERIA")
+            return
+        type, predicate = parts
+
+        if type == "url":
+            urls = self.hist.get_urls(url_match=predicate)
+        elif type == "title":
+            urls = self.hist.get_urls(title_match=predicate)
+        else:
+            print("[!!] Invalid type")
+            return
+
+        urls = [[url.user.name, url.id, url.url[:80], url.title[:80]] for url in urls]
+        urls = [["USER", "ID", "URL", "TITLE"]] + urls
+        table = AsciiTable(urls, "Search Results")
+        self.page_output(table.table, len(urls))
+
+
+class UserShell(SubShell):
+    def __init__(self, parent, hist, user, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.hist = hist
+        self.user = user
+
+    def get_prompt(self):
+        return "historian>DB ({})>".format(self.user.name)
+
+    def do_search(self, args):
+        """
+        search TYPE CRITERIA
+
+            TYPE := url|title
+            TYPE determines what type of entity is being searched.
+
+            CRITERIA is what to search against.
+
+        Example:
+            search url github.com
+            search title "API Reference"
+        """
+        parts = shlex.split(args)
+        if len(parts) != 2:
+            print("[!!] Usage: search TYPE CRITERIA")
+            return
+        type, predicate = parts
+
+        if type == "url":
+            urls = self.hist.get_urls(username=self.user.name, url_match=predicate)
+        elif type == "title":
+            urls = self.hist.get_urls(username=self.user.name, title_match=predicate)
+        else:
+            print("[!!] Invalid type")
+            return
+
+        urls = [[url.id, url.url[:80], url.title[:80]] for url in urls]
+        urls = [["ID", "URL", "TITLE"]] + urls
+        table = AsciiTable(urls, "Search Results")
+        self.page_output(table.table, len(urls))
+
+    def do_url(self, args):
+        """
+        url URLID|URL
+
+            URLID - The ID of the url
+            URL - The text of the url, will cause a search.
+
+        View a url based on either the URL or the ID of the url.
+        """
+        try:
+            url_id = int(args)
+            url = self.hist.get_url_by_id(url_id, self.user.id)
+            utils.print_url(url, True)
+        except ValueError as _:
+            urls = self.hist.get_urls(username=self.user.name, url_match=args)
+            if len(urls) == 1:
+                utils.print_url(urls[0], True)
+            else:
+                urls = [[url.id, url.url[:80], url.title[:80]] for url in urls]
+                urls = [["ID", "URL", "TITLE"]] + urls
+                table = AsciiTable(urls, "Search Results")
+                self.page_output(table.table, len(urls))
 
 
 class DBShell(SubShell):
@@ -156,8 +326,18 @@ class DBShell(SubShell):
         return self.custom_prompt
 
     def do_url(self, arg):
+        parts = arg.split()
+        url_id = username = None
+        if len(parts) == 2:
+            url_id, username = parts
+        elif len(parts) == 1:
+            url_id = parts[0]
+        else:
+            print("[!!] Invalid number of arguments: url URLID [USERNAME]")
+
         try:
-            url = self.hist.get_url_by_id(arg)
+            user_id = self.hist.get_id_for_user(username)
+            url = self.hist.get_url_by_id(url_id, user_id=user_id)
         except DoesNotExist as e:
             print(e)
             return False

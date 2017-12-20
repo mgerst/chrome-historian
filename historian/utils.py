@@ -1,6 +1,8 @@
 import hashlib
 import os
 
+import datetime
+
 BUF_SIZE = 65536
 
 
@@ -17,3 +19,13 @@ def hash_file(filename: str) -> str:
                 break
             sha256.update(data)
     return sha256.hexdigest()
+
+
+def webkit_datetime(itime: int) -> datetime.datetime:
+    """
+    Convert WebKit's timestamp and convert it to a datetime.
+
+    :param itime: The timestamp in WebKit's format (since 01-Jul-1601)
+    :return: UTC datetime
+    """
+    return datetime.datetime.utcfromtimestamp((itime / 1000000) - 11644473600)
