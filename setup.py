@@ -10,12 +10,17 @@ setup(
     zip_safe=False,
 
     setup_requires=[
+        'pytest-runner',
         'flake8',
     ],
     install_requires=[
         'Flask',
         'peewee==2.10.2',
         'terminaltables==3.1.0',
+    ],
+    tests_require=[
+        'pytest',
+        'pytest-sugar',
     ],
     entry_points={
         'console_scripts': ['chrome-historian=historian.historian:main'],
