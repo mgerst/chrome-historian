@@ -89,7 +89,7 @@ class Visits(BaseModel):
     def visit_from(self) -> Optional['Visits']:
         if self.from_visit == 0:
             return None
-        return Visits.select().where(Visits.id == self.from_visit)
+        return Visits.select().where(Visits.id == self.from_visit).get()
 
     @property
     def visits_to(self) -> List['Visits']:

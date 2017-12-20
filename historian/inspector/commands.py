@@ -310,6 +310,7 @@ class URLShell(SubShell):
         self.hist = hist
         self.user = user
         self.url = url
+        self._last_visit = None
 
     def get_prompt(self):
         return "hist>({})>url {}>".format(self.user.name, self.url.id)
@@ -332,154 +333,42 @@ class URLShell(SubShell):
     def do_visit(self, args):
         visit = self.hist.get_visit_by_id(args, user_id=self.user.id)
         utils.print_visit(visit, True)
+        self._last_visit = visit.id
+
+    def do_inspect(self, args):
+        if not args and self._last_visit:
+            visit = self.hist.get_visit_by_id(self._last_visit, user_id=self.user.id)
+            self.spawn_subshell(VisitShell, hist=self.hist, user=self.user, url=self.url, visit=visit)
+        elif args:
+            try:
+                visit_id = int(args)
+            except ValueError:
+                print("[!!] You must specify the visit by ID when using inspect")
+                return
+            visit = self.hist.get_visit_by_id(visit_id, user_id=self.user.id)
+            self.spawn_subshell(VisitShell, hist=self.hist, user=self.user, url=self.url, visit=visit)
+        else:
+            print("[!!] No visit id given, and not last visit to inspect")
 
 
-class DBShell(SubShell):
-    custom_prompt = "historian>DB> "
-    url = None
-    visit = None
-
-    def __init__(self, parent, hist, *args, **kwargs):
-        """
-        :param History hist: A loaded history instance
-        :return:
-        """
-        super(DBShell, self).__init__(parent, *args, **kwargs)
-        if not isinstance(hist, (History, MultiUserHistory)):
-            hist = History(hist)
-
+class VisitShell(SubShell):
+    def __init__(self, parent, hist, user, url, visit, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         self.hist = hist
-
-    def get_prompt(self):
-        if not self.url and not self.visit:
-            return False
-
-        if self.visit and self.url:
-            return 'historian>DB (url {},visit {})> '.format(self.url.id, self.visit.id)
-
-        if self.visit:
-            return 'historian>DB (visit {})> '.format(self.visit.id)
-
-        if self.url:
-            return 'historian>DB (url {})> '.format(self.url.id)
-
-        return self.custom_prompt
-
-    def do_url(self, arg):
-        parts = arg.split()
-        url_id = username = None
-        if len(parts) == 2:
-            url_id, username = parts
-        elif len(parts) == 1:
-            url_id = parts[0]
-        else:
-            print("[!!] Invalid number of arguments: url URLID [USERNAME]")
-
-        try:
-            user_id = self.hist.get_id_for_user(username)
-            url = self.hist.get_url_by_id(url_id, user_id=user_id)
-        except DoesNotExist as e:
-            print(e)
-            return False
-
-        utils.print_url(url)
-
-    def do_visits(self, arg):
-        if not arg and not self.url:
-            print("This command requires a url: inspect [URL ID]")
-
-        if not arg and self.url:
-            url = self.url
-        else:
-            try:
-                url = self.hist.get_url_by_id(arg)
-            except DoesNotExist as e:
-                print(e)
-                return False
-
-        print("Url: ", url.url)
-        for visit in url.visits:
-            print("-" * 25)
-            utils.print_visit(visit)
-
-    def do_visit(self, arg):
-        try:
-            visit = self.hist.get_visit_by_id(arg)
-        except DoesNotExist as e:
-            print(e)
-            return False
-
-        utils.print_visit(visit)
-
-    def do_find_url(self, args):
-        """Find URls by Name"""
-        urls = self.hist.get_urls(url_match=args)
-        if not urls:
-            print("No URLs found that match: {}".format(args))
-            return False
-
-        print("Found {} Urls:".format(len(urls)))
-        for url in urls:
-            print("-" * 25)
-            utils.print_url(url)
-
-    def do_inspect_url(self, args):
-        """Switch to a url inspection context: inspect [URL ID]"""
-        if self.visit:
-            url = self.visit.url
-        else:
-            try:
-                url = self.hist.get_url_by_id(args)
-            except DoesNotExist as e:
-                print(e)
-                return False
-
+        self.user = user
         self.url = url
-
-    def do_clear(self, args):
-        if self.url:
-            self.url = None
-
-        if self.visit:
-            self.visit = None
-
-    def do_info(self, args):
-        if not self.url and not self.visit:
-            print("The info command must be run in the url or visit context")
-            return False
-
-        if self.url:
-            utils.print_url(self.url, full=True)
-
-        if self.url and self.visit:
-            print('-' * 25)
-
-        if self.visit:
-            utils.print_visit(self.visit, full=True)
-
-    def do_inspect_visit(self, args):
-        try:
-            visit = self.hist.get_visit_by_id(args)
-        except DoesNotExist as e:
-            print(e)
-            return False
-
-        self._update_visit(visit)
-
-    def do_visit_up(self, args):
-        if not self.visit:
-            print("visit_up must be used in a visit context")
-            return False
-
-        if self.visit.from_visit is None:
-            print("Current visit has no parent")
-            return False
-
-        self._update_visit(self.visit.from_visit)
-        self.do_info(None)
-
-    def _update_visit(self, visit):
         self.visit = visit
 
-        if self.url and self.url is not visit.url:
-            self.url = visit.url
+    def get_prompt(self):
+        return "hist>({})>url {}>visit {}>".format(self.user.name, self.url.id, self.visit.id)
+
+    def do_info(self, args):
+        utils.print_visit(self.visit, True)
+
+    def do_prev(self, args):
+        visit = self.visit.visit_from
+        url = visit.url_obj
+        self.visit = visit
+        self.url = url
+        self.parent._last_visit = visit.id
+        self.parent.url = url
