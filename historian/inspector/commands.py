@@ -79,14 +79,7 @@ class SubShell(BaseShell):
 
         # If propagate is set, we want to fully quit
         if propagate:
-            # We can have a SubShell as a parent, we need to `up` it in order to
-            # run any cleanup
-            if isinstance(self.parent, SubShell):
-                self.parent.cmdqueue.append("up")
-            # If our parent is a regular `BaseShell` we have reached the root
-            # shell and can quit
-            else:
-                self.parent.cmdqueue.append("quit")
+            self.parent.cmdqueue.append("quit")
 
         return True
 
@@ -234,6 +227,7 @@ class UserShell(SubShell):
         super().__init__(parent, *args, **kwargs)
         self.hist = hist
         self.user = user
+        self._last_url = None
 
     def get_prompt(self):
         return "historian>DB ({})>".format(self.user.name)
@@ -283,6 +277,7 @@ class UserShell(SubShell):
             url_id = int(args)
             url = self.hist.get_url_by_id(url_id, self.user.id)
             utils.print_url(url, True)
+            self._last_url = url_id
         except ValueError as _:
             urls = self.hist.get_urls(username=self.user.name, url_match=args)
             if len(urls) == 1:
@@ -292,6 +287,47 @@ class UserShell(SubShell):
                 urls = [["ID", "URL", "TITLE"]] + urls
                 table = AsciiTable(urls, "Search Results")
                 self.page_output(table.table, len(urls))
+
+    def do_inspect(self, args):
+        if not args and self._last_url:
+            url = self.hist.get_url_by_id(self._last_url, user_id=self.user.id)
+            self.spawn_subshell(URLShell, hist=self.hist, user=self.user, url=url)
+        elif args:
+            try:
+                url_id = int(args)
+            except ValueError:
+                print("[!!] You must specify the url by ID when using inspect")
+                return
+            url = self.hist.get_url_by_id(url_id, user_id=self.user.id)
+            self.spawn_subshell(URLShell, hist=self.hist, user=self.user, url=url)
+        else:
+            print("[!!] No url id given, and no last url to inspect")
+
+
+class URLShell(SubShell):
+    def __init__(self, parent, hist, user, url, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.hist = hist
+        self.user = user
+        self.url = url
+
+    def get_prompt(self):
+        return "hist>({})>url {}>".format(self.user.name, self.url.id)
+
+    def do_info(self, args):
+        utils.print_url(self.url, True)
+
+    def do_visits(self, args):
+        visits = self.url.visits
+        visits = [[visit.id, visit.visited, visit.transition_core, visit.transition_qualifier, visit.from_visit] for visit in visits]
+        visits = [["ID", "TIME", "TYPE", "FLAGS", "FROM"]] + visits
+        table = AsciiTable(visits, "Visits for URL {}".format(self.url.id))
+        self.page_output(table.table, len(visits) + 3)
+
+    def do_url(self, args):
+        self.cleanup()
+        self.parent.cmdqueue.append("inspect {}".format(args))
+        return True
 
 
 class DBShell(SubShell):

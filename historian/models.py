@@ -99,6 +99,10 @@ class Visits(BaseModel):
     def url_obj(self) -> Urls:
         return Urls.select().where(Urls.user == self.user, Urls.id == self.url).get()
 
+    @property
+    def visited(self) -> datetime.datetime:
+        return webkit_datetime(self.visit_time)
+
     def __repr__(self) -> str:
         visit = self.visit_from
         if visit:
