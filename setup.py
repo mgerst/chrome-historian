@@ -15,6 +15,7 @@ setup(
     install_requires=[
         'Flask',
         'peewee==2.10.2',
+        'terminaltables==3.1.0',
     ],
     entry_points={
         'console_scripts': ['chrome-historian=historian.historian:main'],

@@ -1,26 +1,41 @@
+from terminaltables import AsciiTable
+
+
 def print_visit(visit, full=False):
     """
     :param historian.Visit visit:
     """
-    print("Visit: ", visit.id)
-    print("Timestamp: ", visit.visit_time)
+    rows = []
+    rows.append(['Visit', visit.id])
+    rows.append(['Timestamp', visit.visited])
+    rows.append(['URL (ID)', visit.url])
 
     if full:
-        print("Transition: ", visit.transition)
-        print("From Visit: ", visit.from_visit_raw)
-        print("Visit Duration: ", visit.visit_duration)
+        rows.append(['URL (FULL)', visit.url_obj.url])
+        rows.append(['Transition Type', visit.transition_core])
+        rows.append(['Transition Flags', visit.transition_qualifier])
+        rows.append(['From Visit', visit.from_visit])
+        rows.append(['Visit Duration', visit.visit_duration])
+
+    table = AsciiTable(rows)
+    table.inner_heading_row_border = False
+    print(table.table)
 
 
 def print_url(url, full=False):
     """
     :param historian.Url url:
     """
-    print("ID: ", url.id)
-    print("Url: ", url.url)
+    rows = []
+    rows.append(['ID', url.id])
+    rows.append(['Url', url.url])
     if url.title:
-        print("Title: ", url.title)
-    print("Visit Count: ", url.visit_count)
-    print("Last Visit: ", url.latest_visit.id)
+        rows.append(['Title', url.title])
+    rows.append(['Visit Count', url.visit_count])
+    rows.append(['Last Visit', url.last_visit])
 
     if full:
-        print("Typed Count: ", url.typed_count)
+        rows.append(['Typed Count', url.typed_count])
+    table = AsciiTable(rows)
+    table.inner_heading_row_border = False
+    print(table.table)

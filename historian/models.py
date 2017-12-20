@@ -1,6 +1,11 @@
 from enum import IntFlag, IntEnum
 
+import datetime
+from typing import Optional, List
+
 from peewee import *
+
+from .utils import webkit_datetime
 
 database = SqliteDatabase(None)
 
@@ -30,6 +35,28 @@ class Urls(BaseModel):
     hidden = IntegerField()
     favicon_id = IntegerField()
 
+    @property
+    def visits(self):
+        if not hasattr(self, '_visits'):
+            self._visits = None
+
+        if not self._visits:
+            self._visits = list(Visits.select().where(Visits.user == self.user, Visits.url == self.id))
+
+        return self._visits
+
+    @property
+    def last_visit(self) -> datetime.datetime:
+        return webkit_datetime(self.last_visit_time)
+
+    def visit_at(self, time: int) -> 'Visits':
+        visit = Visits.select().where(Visits.user == self.user, Visits.visit_time == time).get()
+        return visit
+
+    @property
+    def latest_visit(self) -> 'Visits':
+        return self.visit_at(self.last_visit_time)
+
     class Meta:
         db_table = 'urls'
         indexes = (
@@ -57,6 +84,30 @@ class Visits(BaseModel):
     def transition_qualifier(self):
         qualifier = self.transition & TransitionQualifier.MASK
         return TransitionQualifier(qualifier)
+
+    @property
+    def visit_from(self) -> Optional['Visits']:
+        if self.from_visit == 0:
+            return None
+        return Visits.select().where(Visits.id == self.from_visit).get()
+
+    @property
+    def visits_to(self) -> List['Visits']:
+        return list(Visits.select().where(Visits.user == self.user, Visits.from_visit == self.id))
+
+    @property
+    def url_obj(self) -> Urls:
+        return Urls.select().where(Urls.user == self.user, Urls.id == self.url).get()
+
+    @property
+    def visited(self) -> datetime.datetime:
+        return webkit_datetime(self.visit_time)
+
+    def __repr__(self) -> str:
+        visit = self.visit_from
+        if visit:
+            return "<Visit: {}->{} url({})>".format(self.from_visit, self.id, self.url)
+        return "<Visit: {} url({})>".format(self.id, self.url)
 
     class Meta:
         db_table = 'visits'
