@@ -28,4 +28,4 @@ def webkit_datetime(itime: int) -> datetime.datetime:
     :param itime: The timestamp in WebKit's format (since 01-Jul-1601)
     :return: UTC datetime
     """
-    return datetime.datetime.utcfromtimestamp((itime / 1000000) - 11644473600)
+    return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=itime)
