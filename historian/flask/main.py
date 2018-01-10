@@ -36,7 +36,8 @@ def index():
     user_list = hist.get_users()
     users = [u.name for u in user_list]
     user = list(filter(lambda u: u.name == username, user_list))[0] if username in users else None
-    urls = hist.get_urls(username, date_lt, date_gt, url_match, title_match, limit, start)
+    urls = hist.get_urls(username=username, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
+                         title_match=title_match, limit=limit, start=start)
 
     return render_template('index.html', hist=hist, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
                            title_match=title_match, will_paginate=will_paginate, limit=limit, start=start,
@@ -78,7 +79,7 @@ def graph_ajax(id):
                 from_visit = Visits.select().where(Visits.id == from_visit).get()
                 visits.add(from_visit)
 
-        to = Visits.select().where(Visits.from_visit==visit.id)
+        to = Visits.select().where(Visits.from_visit == visit.id)
         if len(to) > 0 and len(visits) < 50 and len(visited) < 50:
             for to_visit in to:
                 if to_visit not in visited:
