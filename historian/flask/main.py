@@ -1,6 +1,6 @@
 import json
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 
 from ..models import Visits, Urls
 
@@ -36,26 +36,26 @@ def index():
     user_list = hist.get_users()
     users = [u.name for u in user_list]
     user = list(filter(lambda u: u.name == username, user_list))[0] if username in users else None
-    urls = hist.get_urls(username, date_lt, date_gt, url_match, title_match, limit, start)
+    urls = hist.get_urls(username=username, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
+                         title_match=title_match, limit=limit, start=start)
 
     return render_template('index.html', hist=hist, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
                            title_match=title_match, will_paginate=will_paginate, limit=limit, start=start,
                            url_count=url_count, users=users, current_user=user, urls=urls)
 
 
-@app.route('/graph/<id>')
-def graph(id):
+@app.route('/graph/<int:user_id>/<int:id>')
+def graph(user_id, id):
     hist = app.config['HISTORIES']
-    url = hist.get_url_by_id(id)
+    url = hist.get_url_by_id(id, user_id)
     print(url.id)
 
     return render_template('view_graph.html', hist=hist, url=url)
 
 
-@app.route('/graph/<id>/json')
-def graph_ajax(id):
-    hist = app.config['HISTORIES']
-    visits = set(Visits.select().where(Visits.url == id))
+@app.route('/graph/<int:user_id>/<int:id>/json')
+def graph_ajax(user_id, id):
+    visits = set(Visits.select().where(Visits.user == user_id, Visits.url == id))
     data = []
     left = True
     visited = set()
@@ -70,6 +70,9 @@ def graph_ajax(id):
             "url": url.url,
             "url_title": url.title,
             "from": visit.from_visit,
+            "transition": visit.transition,
+            "transition_core": visit.transition_core,
+            "transition_qualifier": visit.transition_qualifier,
         })
 
         if visit.from_visit:
@@ -78,7 +81,7 @@ def graph_ajax(id):
                 from_visit = Visits.select().where(Visits.id == from_visit).get()
                 visits.add(from_visit)
 
-        to = Visits.select().where(Visits.from_visit==visit.id)
+        to = Visits.select().where(Visits.from_visit == visit.id)
         if len(to) > 0 and len(visits) < 50 and len(visited) < 50:
             for to_visit in to:
                 if to_visit not in visited:
@@ -86,8 +89,7 @@ def graph_ajax(id):
 
         if len(visits) == 0:
             left = False
-
-    return json.dumps(data)
+    return jsonify(data)
 
 
 @app.route('/user/')

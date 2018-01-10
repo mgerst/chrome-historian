@@ -20,6 +20,10 @@ View Graph | Chrome Historian
                     <dd><span class="selected-url"></span></dd>
                     <dt>Title</dt>
                     <dd><span class="selected-title"></span></dd>
+                    <dt>Transition Core</dt>
+                    <dd><span class="selected-transition-core"></span></dd>
+                    <dt>Transition Qualifier</dt>
+                    <dd><span class="selected-transition-qual"></span></dd>
                 </dl>
             </div>
         </div>
@@ -116,7 +120,7 @@ View Graph | Chrome Historian
 
             $.ajax({
                 method: "GET",
-                url: "{{ url_for('graph_ajax', id=url.id) }}",
+                url: "{{ url_for('graph_ajax', user_id=url.user.id, id=url.id) }}",
                 dataType: 'json',
                 success: function(data) {
                     for (var i = 0; i < data.length; i++) {
@@ -127,7 +131,8 @@ View Graph | Chrome Historian
                                 id: visit.id,
                                 url: visit.url,
                                 uri_id: visit.url_id,
-                                title: visit.title
+                                title: visit.title,
+                                transition: visit.transition
                             }
                         };
 
@@ -238,6 +243,8 @@ View Graph | Chrome Historian
 
                 info.find("span.selected-url").text(node.data("url"));
                 info.find("span.selected-title").text(node.data("title"));
+                info.find("span.selected-transition-core").text(displayTransitionCore(node.data("transition")));
+                info.find("span.selected-transition-qual").text(displayTransitionQualifier(node.data("transition")));
 
                 info.removeClass("hide");
                 info.show();
@@ -248,6 +255,8 @@ View Graph | Chrome Historian
 
                 info.find("span.selected-url").text("");
                 info.find("span.selected-title").text("");
+                info.find("span.selected-transition-core").text("");
+                info.find("span.selected-transition-qual").text("");
 
                 info.hide();
             }

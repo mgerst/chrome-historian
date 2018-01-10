@@ -3,8 +3,18 @@
 {% block content %}
     <div class="row">
         <div class="col-md-12">
-            <h2>Urls ({{ hist.urls|length }})</h2>
+            <h2>Urls ({{ url_count }})</h2>
             <form class="form-inline">
+                <div class="form-group">
+                    <label for="user">User:</label>
+                    <select class="form-control" id="user" name="username">
+                        <option value="">-- Select User--</option>
+                        {% for user in users %}
+                        <option value="{{ user }}"{% if user == current_user.name %} selected="selected"{% endif %}>{{ user }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {{ current_user.username }}
                 <div class="form-group">
                     <label for="title">Title:</label>
                     <input type="text" class="form-control" name="title_match" id="title" placeholder="{{ title_match }}">
@@ -23,12 +33,12 @@
             <nav>
                 <ul class="pager">
                     {% if start >= limit %}
-                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">&larr; Previous</a></li>
+                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}&username={{ current_user.name }}">&larr; Previous</a></li>
                     {% else %}
                         <li class="previous disabled"><a href="#">&larr; Previous</a></li>
                     {% endif %}
-                    {% if start + limit < hist.urls|length %}
-                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">Next &rarr;</a></li>
+                    {% if start + limit < url_count %}
+                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}&username={{ current_user.name }}">Next &rarr;</a></li>
                     {% else %}
                         <li class="next disabled"><a href="#">Next &rarr;</a></li>
                     {% endif %}
@@ -52,10 +62,10 @@
                         <td>{{ url.user.name }}</td>
                         <td>{{ url.url }}</td>
                         <td>{{ url.title }}</td>
-                        <td title="{{ url.last_visit_time_raw }}">{{ url.last_visit_time }}</td>
+                        <td title="{{ url.last_visit_time }}">{{ url.last_visit }}</td>
                         <td>{{ url.visit_count }}</td>
                         <td>
-                            <a href="{{ url_for('graph', id=url.id) }}">View Graph</a>
+                            <a href="{{ url_for('graph', user_id=url.user.id, id=url.id) }}">View Graph</a>
                         </td>
                     </tr>
                 {% else %}
@@ -69,12 +79,12 @@
             <nav>
                 <ul class="pager">
                     {% if start >= limit %}
-                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">&larr; Previous</a></li>
+                        <li class="previous"><a href="?limit={{ limit }}&start={{ start - 25 }}&title_match={{ title_match }}&url_match={{ url_match }}&username={{ current_user.name }}">&larr; Previous</a></li>
                     {% else %}
                         <li class="previous disabled"><a href="#">&larr; Previous</a></li>
                     {% endif %}
-                    {% if start + limit < hist.urls|length %}
-                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}">Next &rarr;</a></li>
+                    {% if start + limit < url_count %}
+                        <li class="next"><a href="?limit={{ limit }}&start={{ start + 25 }}&title_match={{ title_match }}&url_match={{ url_match }}&username={{ current_user.name }}">Next &rarr;</a></li>
                     {% else %}
                         <li class="next disabled"><a href="#">Next &rarr;</a></li>
                     {% endif %}
