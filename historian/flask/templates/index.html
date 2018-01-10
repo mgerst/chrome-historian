@@ -65,7 +65,7 @@
                         <td title="{{ url.last_visit_time }}">{{ url.last_visit }}</td>
                         <td>{{ url.visit_count }}</td>
                         <td>
-                            <a href="{{ url_for('graph', id=url.id) }}">View Graph</a>
+                            <a href="{{ url_for('graph', user_id=url.user.id, id=url.id) }}">View Graph</a>
                         </td>
                     </tr>
                 {% else %}

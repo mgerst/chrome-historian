@@ -1,6 +1,6 @@
 import json
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 
 from ..models import Visits, Urls
 
@@ -44,19 +44,18 @@ def index():
                            url_count=url_count, users=users, current_user=user, urls=urls)
 
 
-@app.route('/graph/<id>')
-def graph(id):
+@app.route('/graph/<int:user_id>/<int:id>')
+def graph(user_id, id):
     hist = app.config['HISTORIES']
-    url = hist.get_url_by_id(id)
+    url = hist.get_url_by_id(id, user_id)
     print(url.id)
 
     return render_template('view_graph.html', hist=hist, url=url)
 
 
-@app.route('/graph/<id>/json')
-def graph_ajax(id):
-    hist = app.config['HISTORIES']
-    visits = set(Visits.select().where(Visits.url == id))
+@app.route('/graph/<int:user_id>/<int:id>/json')
+def graph_ajax(user_id, id):
+    visits = set(Visits.select().where(Visits.user == user_id, Visits.url == id))
     data = []
     left = True
     visited = set()
@@ -71,6 +70,9 @@ def graph_ajax(id):
             "url": url.url,
             "url_title": url.title,
             "from": visit.from_visit,
+            "transition": visit.transition,
+            "transition_core": visit.transition_core,
+            "transition_qualifier": visit.transition_qualifier,
         })
 
         if visit.from_visit:
@@ -87,8 +89,7 @@ def graph_ajax(id):
 
         if len(visits) == 0:
             left = False
-
-    return json.dumps(data)
+    return jsonify(data)
 
 
 @app.route('/user/')
