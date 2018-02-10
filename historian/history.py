@@ -1,13 +1,8 @@
-import datetime
 import pathlib
-import sqlite3
 import tempfile
 from collections import namedtuple
 from typing import List, Optional
 
-from peewee import fn
-
-from historian.exceptions import DoesNotExist
 from historian.utils import hash_file
 from .models import database, User, Urls, Visits, VisitSource
 
@@ -18,7 +13,12 @@ class MultiUserHistory(object):
     """
     Represents a collection of chrome histories. It assumes we have one database per user,
     and will use the filename of the database in the histories folder as the username.
+
+    :ivar str merged_path: The filepath to the merged database
+    :ivar dict dbs: Dictionary containing histories
+    :ivar str username: Active username (nicer single user history)
     """
+
     def __init__(self, db_paths, merged_path=None):
         if not merged_path:
             merged_path = tempfile.mkstemp(prefix='historian-combined-')[1]
@@ -35,11 +35,20 @@ class MultiUserHistory(object):
         # single- vs multi-user  histories
         self.username = None
 
-    def find_histories(self, db_paths):
+    def find_histories(self, db_paths: List[pathlib.Path]):
+        """
+        Load the given histories into the dbs dict.
+        """
         for path in db_paths:
             self.dbs[path.name] = path
 
     def merge_history(self):
+        """
+        Merge the individual user histories into the merged database.
+
+        Individual user database are hashed so avoid re-merging the histories on every
+        run. The merged database will be created if it doesn't already exist.
+        """
         print("[Historian] Merging History")
         if not self.merged_path.exists():
             database.connect()
@@ -84,10 +93,16 @@ class MultiUserHistory(object):
         database.close()
 
     def get_users(self) -> List[UserRecord]:
+        """
+        Get a list of users in the merged database.
+        """
         users = User.select()
         return list(users)
 
-    def get_user(self, user_id: Optional[int]=None, username: Optional[str]=None) -> User:
+    def get_user(self, user_id: Optional[int] = None, username: Optional[str] = None) -> User:
+        """
+        Get the given user by user id or username.
+        """
         if user_id:
             return User.select().where(User.id == user_id).get()
         elif username:
@@ -95,9 +110,17 @@ class MultiUserHistory(object):
         raise RuntimeError("You must specify either user_id or username when calling get_user")
 
     def get_user_count(self) -> int:
+        """
+        Get number of users in the merged database.
+        """
         return User.select().count()
 
-    def get_url_count(self, username=None) -> int:
+    def get_url_count(self, username: Optional[str] = None) -> int:
+        """
+        Get the number of urls in the merged database.
+
+        :param username: Username to filter and count on
+        """
         if username:
             user = User.select().where(User.name == username).get()
             return Urls.select().where(Urls.user == user).count()
@@ -105,6 +128,9 @@ class MultiUserHistory(object):
             return Urls.select().count()
 
     def get_url_by_id(self, id: int, user_id: int) -> Urls:
+        """
+        Get a url by the url id and user id.
+        """
         return Urls.select().where(Urls.id == id, Urls.user == user_id).get()
 
     def get_urls(self, *, username=None, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None,
@@ -152,12 +178,21 @@ class MultiUserHistory(object):
         return list(query)
 
     def get_id_for_user(self, username: str) -> int:
+        """
+        Get the user id for a given username
+        """
         return User.select(User.id).where(User.name == username).get().id
 
     def get_visit_count(self) -> int:
+        """
+        Get the number of visits for the url.
+        """
         return Visits.select().count()
 
     def get_visit_by_id(self, visit_id: int, user_id: int) -> Visits:
+        """
+        Get a visit for this url by the visit id and user id.
+        """
         return Visits.select().where(Visits.user == user_id, Visits.id == visit_id).get()
 
     def __str__(self):
@@ -173,6 +208,7 @@ class History(MultiUserHistory):
 
     - urls
     - visits
+    - visit_source
 
     `urls` contains a list of all urls that the browser has in its history. `visits`
     contains a list of every unique visit to the urls in the `urls` table.
@@ -183,18 +219,27 @@ class History(MultiUserHistory):
         self.user = User.select().where(User.name == name).get()
 
     def get_url_count(self, **kwargs) -> int:
+        """
+        Get number of urls in the history
+        """
         return super().get_url_count(self.user.name)
 
     def get_url_by_id(self, id: int, **kwargs) -> Urls:
+        """
+        Get a url by its id
+        """
         return super().get_url_by_id(id, self.user.id)
 
     def get_urls(self, *, date_lt=None, date_gt=None, url_match=None, title_match=None, limit=None,
-                 start=None, **kwargs):
+                 start=None, **kwargs) -> List[Urls]:
         return super().get_urls(username=self.user.name, date_lt=date_lt, date_gt=date_gt, url_match=url_match,
                                 title_match=title_match, limit=limit, start=start)
 
     @property
     def db_path(self) -> str:
+        """
+        The filepath of the history db
+        """
         return self.dbs[self.user.name]
 
     def __str__(self):

@@ -15,13 +15,20 @@ setup(
     ],
     install_requires=[
         'Flask',
-        'peewee==2.10.2',
+        'peewee==3.0.13',
         'terminaltables==3.1.0',
     ],
     tests_require=[
         'pytest',
         'pytest-sugar',
     ],
+    extras_require={
+        'docs': [
+            'sphinx',
+            'sphinx_rtd_theme',
+            'sphinx-autodoc-typehints',
+        ]
+    },
     entry_points={
         'console_scripts': ['chrome-historian=historian.historian:main'],
     },

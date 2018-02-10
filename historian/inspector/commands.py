@@ -2,24 +2,39 @@ import cmd
 import shlex
 import shutil
 from pathlib import Path
-
 from subprocess import Popen, PIPE
+from typing import Union, Optional
+
 from terminaltables import AsciiTable
 
-from historian.exceptions import DoesNotExist
 from historian.history import History, MultiUserHistory
 from historian.inspector import utils
 from historian.utils import get_dbs
 
 
 class BaseShell(cmd.Cmd):
+    """
+    The base shell all other inspector shells are derived from.
+
+    Handles exiting, setting the prompt, and other shell utilities.
+    """
+    #: Statically set a custom prompt
     custom_prompt = None
 
-    def get_prompt(self):
+    def get_prompt(self) -> Union[str, bool]:
+        """
+        Override to dynamically set the prompt.
+        """
         return False
 
     @property
-    def prompt(self):
+    def prompt(self) -> str:
+        """
+        Get the current prompt.
+
+        Correctly handles the difference between :py:meth:`BaseShell.get_prompt` and
+        :py:meth:`BaseShell.custom_prompt`.
+        """
         pmpt = self.get_prompt()
 
         if not pmpt and self.custom_prompt:
@@ -37,12 +52,27 @@ class BaseShell(cmd.Cmd):
         return self.do_exit(arg)
 
     def spawn_subshell(self, clz, *args, **kwargs):
+        """
+        Spawns a subshell and sets the current shell as the
+        subshells parent.
+
+        :param clz: The class of the subshell
+        :param args: Any positional arguments for the subshell
+        :param kwargs: Any keyword arguments for the subshell
+        """
         if isinstance(clz, type(SubShell)):
             ss = clz(self, *args, **kwargs)
             ss.cmdloop()
 
     @staticmethod
-    def page_output(output, output_height=None):
+    def page_output(output, output_height: Optional[int] = None):
+        """
+        Send the given output through a pager if it is larger than
+        the terminal height.
+
+        :param output: The output to print
+        :param output_height: The height of the output, calculated if not given
+        """
         term_size = shutil.get_terminal_size((80, 20))
         if not output_height:
             output_height = len(output.split('\n'))
@@ -60,6 +90,12 @@ class BaseShell(cmd.Cmd):
 
 
 class SubShell(BaseShell):
+    """
+    The base class for a inspector sub shell.
+
+    Correctly handles exiting the application as well as
+    navigating to the parent shell.
+    """
     intro = None
 
     def __init__(self, parent, *args, **kwargs):
@@ -71,6 +107,9 @@ class SubShell(BaseShell):
         self.parent = parent
 
     def cleanup(self):
+        """
+        Override in order to do cleanup when exiting this shell.
+        """
         pass
 
     def do_up(self, arg, propagate=False):
@@ -93,6 +132,11 @@ class SubShell(BaseShell):
 
 
 class InspectorShell(BaseShell):
+    """
+    The main shell, entered on the start.
+
+    Primarily deals with managing the loaded database.
+    """
     intro = 'Chrome Historian Inspector.  Type help or ? to list commands.\n'
     hist = None
 
@@ -143,6 +187,9 @@ class InspectorShell(BaseShell):
 
 
 class HistoryShell(SubShell):
+    """
+    Shell that deals with managing the merged database.
+    """
     custom_prompt = "historian>DB> "
 
     def __init__(self, parent, hist, *args, **kwargs):
@@ -223,6 +270,9 @@ class HistoryShell(SubShell):
 
 
 class UserShell(SubShell):
+    """
+    Shell for dealing with a specific user's history.
+    """
     def __init__(self, parent, hist, user, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.hist = hist
@@ -305,6 +355,9 @@ class UserShell(SubShell):
 
 
 class URLShell(SubShell):
+    """
+    Shell that gives access to information about a specific url.
+    """
     def __init__(self, parent, hist, user, url, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.hist = hist
@@ -316,26 +369,47 @@ class URLShell(SubShell):
         return "hist>({})>url {}>".format(self.user.name, self.url.id)
 
     def do_info(self, args):
+        """
+        Print information about the current url
+        """
         utils.print_url(self.url, True)
 
     def do_visits(self, args):
+        """
+        List the visits for the current url
+        """
         visits = self.url.visits
-        visits = [[visit.id, visit.visited, visit.transition_core, visit.transition_qualifier, visit.from_visit] for visit in visits]
+        visits = [[visit.id, visit.visited, visit.transition_core, visit.transition_qualifier, visit.from_visit] for
+                  visit in visits]
         visits = [["ID", "TIME", "TYPE", "FLAGS", "FROM"]] + visits
         table = AsciiTable(visits, "Visits for URL {}".format(self.url.id))
         self.page_output(table.table, len(visits) + 3)
 
     def do_url(self, args):
+        """
+        Switch to a new url.
+
+        Same as running:
+
+            up
+            inspect <newid>
+        """
         self.cleanup()
         self.parent.cmdqueue.append("inspect {}".format(args))
         return True
 
     def do_visit(self, args):
+        """
+        Show information about a specific visit
+        """
         visit = self.hist.get_visit_by_id(args, user_id=self.user.id)
         utils.print_visit(visit, True)
         self._last_visit = visit.id
 
     def do_inspect(self, args):
+        """
+        Span a subshell to inspect the specific visit.
+        """
         if not args and self._last_visit:
             visit = self.hist.get_visit_by_id(self._last_visit, user_id=self.user.id)
             self.spawn_subshell(VisitShell, hist=self.hist, user=self.user, url=self.url, visit=visit)
@@ -352,6 +426,9 @@ class URLShell(SubShell):
 
 
 class VisitShell(SubShell):
+    """
+    Subshell dealing with visit information.
+    """
     def __init__(self, parent, hist, user, url, visit, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.hist = hist
@@ -363,9 +440,15 @@ class VisitShell(SubShell):
         return "hist>({})>url {}>visit {}>".format(self.user.name, self.url.id, self.visit.id)
 
     def do_info(self, args):
+        """
+        Print information about the current visit.
+        """
         utils.print_visit(self.visit, True)
 
     def do_prev(self, args):
+        """
+        Inspect the current visit's preceding visit.
+        """
         visit = self.visit.visit_from
         url = visit.url_obj
         self.visit = visit
