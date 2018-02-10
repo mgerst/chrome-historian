@@ -3,7 +3,9 @@ from terminaltables import AsciiTable
 
 def print_visit(visit, full=False):
     """
-    :param historian.Visit visit:
+    Print information about a visit in a table.
+
+    :param historian.models.Visits visit:
     """
     rows = []
     rows.append(['Visit', visit.id])
@@ -24,7 +26,9 @@ def print_visit(visit, full=False):
 
 def print_url(url, full=False):
     """
-    :param historian.Url url:
+    Print information about a url in a table.
+
+    :param historian.models.Urls url:
     """
     rows = []
     rows.append(['ID', url.id])

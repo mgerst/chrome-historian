@@ -26,6 +26,7 @@ setup(
         'docs': [
             'sphinx',
             'sphinx_rtd_theme',
+            'sphinx-autodoc-typehints',
         ]
     },
     entry_points={
