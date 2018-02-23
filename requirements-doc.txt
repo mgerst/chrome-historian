@@ -1,5 +1,5 @@
 -r requirements.txt
 
-sphinx==1.6.7
+sphinx==1.7.1
 sphinx_rtd_theme==0.2.4
 sphinx-autodoc-typehints==1.2.4
